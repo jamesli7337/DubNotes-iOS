@@ -17,6 +17,7 @@ struct LibraryView: View {
     @State private var layout = Layout.grid
     @State private var sort = Sort.manual
     @State private var showingNew = false
+    @State private var showingSettings = false
     @State private var renaming: Notebook?
     @State private var renameText = ""
     @State private var deleting: Notebook?
@@ -56,11 +57,12 @@ struct LibraryView: View {
             .navigationTitle("DubNotes")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showingNew = true } label: { Label("New", systemImage: "plus") }
-                        .buttonStyle(.borderedProminent)
+                    Button { showingSettings = true } label: { Label("Settings", systemImage: "gearshape") }
                 }
             }
+            .safeAreaInset(edge: .bottom) { newDock }
             .sheet(isPresented: $showingNew) { NewNotebookPlaceholder() }
+            .sheet(isPresented: $showingSettings) { SettingsSheet() }
             .alert("Rename notebook", isPresented: Binding(get: { renaming != nil },
                                                            set: { if !$0 { renaming = nil } })) {
                 TextField("Name", text: $renameText)
@@ -80,6 +82,22 @@ struct LibraryView: View {
                 Text("All of its pages and drawings will be removed.")
             }
         }
+    }
+
+    // MARK: New button
+
+    /// The web's floating dock: a frosted capsule centred at the bottom holding the "+ New" pill.
+    private var newDock: some View {
+        Button { showingNew = true } label: {
+            Label("New", systemImage: "plus").padding(.horizontal, 8)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .padding(8)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color(.separator)))
+        .padding(.bottom, 10)
     }
 
     // MARK: Header
