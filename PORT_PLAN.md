@@ -84,18 +84,18 @@ Ordered by what blocks the most other work.
 
 ---
 
-## Decisions you need from me
+## Decisions (settled)
 
-1. **PencilKit vs custom drawing** – PencilKit gives native Pencil feel, latency and palm rejection for free but can't store DubNotes' `[x,y,pressure]` strokes, snap, or per-page `"auto"` ink; custom keeps the data model and tools but you must hand-build every Pencil behaviour on the Mac.
-2. **Keep or park board / mind-map ("diagram") mode** – it accounts for two of the six element kinds and needs a second canvas, but parking it only costs the model work already scheduled (Port now #27) so existing boards still import.
-3. **First data path: backup-JSON import vs start empty** – import lets every Port-now feature be tested on real notebooks in CI, but means committing to the v11 format; starting empty is simpler but leaves screenshots with only synthetic data.
-4. **Persistence tech: SwiftData vs Core Data vs files (JSON/SQLite)** – SwiftData is the least code but ties you to iOS 17+ and is awkward for large point arrays; files/SQLite keep stroke arrays cheap and DATA_FORMAT 1:1 but you write the migration and dirty tracking yourself.
-5. **Import semantics: replace-all (as web) vs merge** – replace-all matches the web and is simplest; merge is safer once iCloud exists but needs id-collision rules.
-6. **Do you want sync at all (iCloud) and AI mode** – both are absent or off-limits on web ("Off-limits for now: search, sync"); each adds Mac-only setup and, for AI, a server and key-handling problem.
-7. **Test target in CI** – adding an `xcodebuild test` job makes most of "Port now" verifiable beyond screenshots; without it, logic like migrations and the trailing-blank rule can only be checked by eye.
-8. **Page unit system** – keep the web's 820×1060 page units (easiest import, `Page.w/h` carries over) or switch to points/PDF units (cleaner natively, needs a conversion on import and export).
-9. **Minimum iOS** – currently 17.0 in `project.yml`; fine for SwiftData/Observation, but check it against the oldest iPad you must support.
-10. **Split screen** – drop in favour of iPadOS multitasking, or rebuild in-app later.
+1. Pen: PencilKit for pen, highlighter, eraser and lasso ink. Custom code for shapes, text, tape, images, ruler, protractor, pages, PDFs, AI. Strokes convert to/from the backup format on save/load. AI ink is a throwaway second PencilKit layer. Hold-to-snap during the stroke is dropped; snap after pen lift is kept.
+2. Diagram/board mode: park the canvas, keep the data model so old boards import.
+3. First data path: backup JSON import, using a small throwaway backup committed as a test file. Never commit real notes, backups, keys or secrets.
+4. Storage: plain files, one folder per notebook, autosaved like Notability.
+5. Import: add as new copies, never replace existing data.
+6. No sync at launch (keep the file layout compatible with iCloud Drive later). AI launches. Order: core app, Sign in with Apple, daily limit, AI.
+7. Add a test target and an xcodebuild test step in CI.
+8. Page size: keep 820x1060 units; convert only on PDF/image export.
+9. Minimum iOS 17.0.
+10. Split screen: keep, built in-app (formula sheet beside the notebook), after the core works. Not tuned on the web anymore.
 
 ## Problems noticed (not fixed)
 
