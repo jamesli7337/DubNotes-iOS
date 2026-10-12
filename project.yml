@@ -1,0 +1,25 @@
+name: DubNotes
+options:
+  bundleIdPrefix: com.jamesli
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  DubNotes:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - DubNotes
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jamesli.dubnotes
+        TARGETED_DEVICE_FAMILY: "2"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGN_IDENTITY: ""
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        INFOPLIST_KEY_CFBundleDisplayName: DubNotes
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
