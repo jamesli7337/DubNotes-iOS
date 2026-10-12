@@ -1,5 +1,7 @@
 # DubNotes iOS port plan
 
+Where the Decisions (settled) section conflicts with anything above it, the settled section wins.
+
 Source of truth for the web app: `jamesli7337/DubNotes` @ `85b09cb` (read via a throwaway clone outside this repo; no sibling `../DubNotes` and no `gh` on this machine).
 `DubNotes_Architecture.md` does **not** exist in that repo. I used `CLAUDE.md` (architecture), `README.md` (feature list) and `DATA_FORMAT.md` (schema). Source files were opened only to confirm that "diagram mode" is the web app's **board / mind-map** mode (`Notebook.kind = 'board'`, bubbles, connectors).
 
@@ -96,6 +98,7 @@ Ordered by what blocks the most other work.
 8. Page size: keep 820x1060 units; convert only on PDF/image export.
 9. Minimum iOS 17.0.
 10. Split screen: keep, built in-app (formula sheet beside the notebook), after the core works. Not tuned on the web anymore.
+11. Screens: match the web app's current layout and look, screen by screen, using screenshots in design/ as the reference. Build with native iPad controls, not copied web markup. This overrides any 'redesign, do not copy' wording above for screen layout.
 
 ## Problems noticed (not fixed)
 
