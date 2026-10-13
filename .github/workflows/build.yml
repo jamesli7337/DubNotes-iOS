@@ -35,8 +35,33 @@ jobs:
             -scheme DubNotes \
             -destination "platform=iOS Simulator,id=$UDID" \
             -derivedDataPath build \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 60 \
+            -resultBundlePath build/test.xcresult \
             CODE_SIGNING_ALLOWED=NO
+      - name: Test diagnostics
+        if: always()
+        run: |
+          echo "=== Failing tests ==="
+          if [ -d build/test.xcresult ]; then
+            xcrun xcresulttool get test-results tests --path build/test.xcresult 2>&1 | head -n 300 || true
+            echo "=== Test summary (failures) ==="
+            xcrun xcresulttool get test-results summary --path build/test.xcresult 2>&1 | head -n 200 || true
+            echo "=== Legacy failure summaries ==="
+            xcrun xcresulttool get --legacy --path build/test.xcresult --format json 2>&1 | grep -E '"(testFailureSummaries|message|failureSummaries)"|_value' | head -n 100 || true
+          else
+            echo "No result bundle at build/test.xcresult"
+          fi
+          echo "=== Crash logs ==="
+          ls -la ~/Library/Logs/DiagnosticReports 2>/dev/null || echo "none"
+          for f in ~/Library/Logs/DiagnosticReports/*; do
+            [ -f "$f" ] || continue
+            echo "----- $f"
+            head -n 60 "$f"
+          done
       - name: Boot iPad simulator
+        if: always()
         run: |
           set -e
           UDID=$(xcrun simctl list devices available | grep -m1 iPad | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}')
@@ -48,6 +73,7 @@ jobs:
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
       - name: Install and launch app
+        if: always()
         run: |
           set -e
           APP=$(ls -d build/Build/Products/*-iphonesimulator/*.app | head -n1)
@@ -59,11 +85,13 @@ jobs:
           xcrun simctl install booted "$APP"
           xcrun simctl launch booted com.jamesli.dubnotes
       - name: Verify app is still running
+        if: always()
         run: |
           set -e
           sleep 8
           xcrun simctl spawn booted launchctl list | grep dubnotes
       - name: Take screenshot
+        if: always()
         run: |
           set -e
           mkdir -p screenshots

@@ -2,6 +2,10 @@ import XCTest
 @testable import DubNotes
 
 final class NotebookDocumentTests: XCTestCase {
+    override func setUp() {
+        continueAfterFailure = false // later lines index into results; stop at the first failure instead of trapping
+    }
+
     // MARK: Trailing blank page
 
     func testTrailingBlankIsAddedWhenTheLastPageHasContent() {

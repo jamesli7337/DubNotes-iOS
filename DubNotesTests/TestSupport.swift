@@ -72,6 +72,7 @@ class ScratchTestCase: XCTestCase {
     var scratch: URL!
 
     override func setUpWithError() throws {
+        continueAfterFailure = false // later lines index into results; stop at the first failure instead of trapping
         scratch = FileManager.default.temporaryDirectory.appendingPathComponent("DubNotesTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
     }

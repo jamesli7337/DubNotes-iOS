@@ -2,6 +2,10 @@ import XCTest
 @testable import DubNotes
 
 final class GeometryTests: XCTestCase {
+    override func setUp() {
+        continueAfterFailure = false // later lines index into results; stop at the first failure instead of trapping
+    }
+
     private let square = [Pt(0, 0), Pt(10, 0), Pt(10, 10), Pt(0, 10)]
 
     func testPointInPolygon() {

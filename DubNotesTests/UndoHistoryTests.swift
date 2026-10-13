@@ -2,6 +2,10 @@ import XCTest
 @testable import DubNotes
 
 final class UndoHistoryTests: XCTestCase {
+    override func setUp() {
+        continueAfterFailure = false // later lines index into results; stop at the first failure instead of trapping
+    }
+
     func testPushClearsRedoAndPopsMoveBetweenStacks() {
         var h = UndoHistory()
         let a = EditOp.addItems(pageId: "p", items: [])
