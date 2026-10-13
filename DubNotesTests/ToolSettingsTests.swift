@@ -113,7 +113,7 @@ final class ToolSettingsTests: XCTestCase {
     }
 
     func testAnOldOrDamagedSaveStillLoads() throws {
-        let json = #"{"kind":"shape","penSize":99,"penSwatches":["#ZZZ","#2563EB","#2563eb"],"toolOrder":["hand","bogus"],"penColor":"#missing"}"#
+        let json = ##"{"kind":"shape","penSize":99,"penSwatches":["#ZZZ","#2563EB","#2563eb"],"toolOrder":["hand","bogus"],"penColor":"#missing"}"##
         let s = try JSONDecoder().decode(ToolSettings.self, from: Data(json.utf8))
         XCTAssertEqual(s.kind, .pen) // the old draw-then-snap tool is gone: back to the pen
         XCTAssertEqual(s.penSize, 12) // clamped
