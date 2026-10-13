@@ -342,12 +342,18 @@ extension PageView {
             // the dragged items, drawn where they will land; their originals are hidden on the page
             if let img = xf.strokeImage, let to = selectionFrame {
                 let from = xf.startFrame
-                let sx = from.w > 0 ? to.w / from.w : 1, sy = from.h > 0 ? to.h / from.h : 1
+                let sx: Double = from.w > 0 ? to.w / from.w : 1
+                let sy: Double = from.h > 0 ? to.h / from.h : 1
+                let toCX: Double = to.x + to.w / 2
+                let toCY: Double = to.y + to.h / 2
+                let fromCX: Double = from.x + from.w / 2
+                let fromCY: Double = from.y + from.h / 2
+                let turn: Double = to.rot - from.rot
                 ctx.saveGState()
-                ctx.translateBy(x: CGFloat(to.x + to.w / 2), y: CGFloat(to.y + to.h / 2))
-                ctx.rotate(by: CGFloat(to.rot - from.rot))
+                ctx.translateBy(x: CGFloat(toCX), y: CGFloat(toCY))
+                ctx.rotate(by: CGFloat(turn))
                 ctx.scaleBy(x: CGFloat(sx), y: CGFloat(sy))
-                ctx.translateBy(x: CGFloat(-(from.x + from.w / 2)), y: CGFloat(-(from.y + from.h / 2)))
+                ctx.translateBy(x: CGFloat(-fromCX), y: CGFloat(-fromCY))
                 UIGraphicsPushContext(ctx)
                 img.draw(in: xf.strokeImageRect)
                 UIGraphicsPopContext()
@@ -390,7 +396,8 @@ extension PageView {
         let handleFill = paper.color == .dark ? UIColor.fromHex("#1e2330") : UIColor.white
         let half = 5 / z
         func handle(_ p: Pt) {
-            let r = CGRect(x: p.x - Double(half), y: p.y - Double(half), width: Double(half) * 2, height: Double(half) * 2)
+            let h: Double = Double(half)
+            let r = CGRect(x: p.x - h, y: p.y - h, width: h * 2, height: h * 2)
             ctx.setFillColor(handleFill.cgColor)
             ctx.fill(r)
             ctx.setStrokeColor(accent.cgColor)
@@ -408,7 +415,8 @@ extension PageView {
             ctx.move(to: CGPoint(x: top.x, y: top.y))
             ctx.addLine(to: CGPoint(x: grip.x, y: grip.y))
             ctx.strokePath()
-            let r = CGRect(x: grip.x - Double(half), y: grip.y - Double(half), width: Double(half) * 2, height: Double(half) * 2)
+            let h: Double = Double(half)
+            let r = CGRect(x: grip.x - h, y: grip.y - h, width: h * 2, height: h * 2)
             ctx.setFillColor(accent.cgColor)
             ctx.fillEllipse(in: r)
         }
@@ -426,7 +434,8 @@ extension PageView {
         for trail in laser {
             if trail.count > 1 {
                 for i in 1..<trail.count {
-                    let alpha = CGFloat(max(0, 1 - (now - trail[i].t) / fade))
+                    let age: Double = (now - trail[i].t) / fade
+                    let alpha: CGFloat = CGFloat(max(0.0, 1.0 - age))
                     ctx.setStrokeColor(color.withAlphaComponent(alpha * 0.35).cgColor)
                     ctx.setLineWidth(14)
                     ctx.move(to: CGPoint(x: trail[i - 1].x, y: trail[i - 1].y))
@@ -440,9 +449,11 @@ extension PageView {
                 }
             }
             if let head = trail.last {
-                let alpha = CGFloat(max(0, 1 - (now - head.t) / fade))
+                let headAge: Double = (now - head.t) / fade
+                let alpha: CGFloat = CGFloat(max(0.0, 1.0 - headAge))
                 ctx.setFillColor(color.withAlphaComponent(alpha).cgColor)
-                ctx.fillEllipse(in: CGRect(x: head.x - 5, y: head.y - 5, width: 10, height: 10))
+                let headRect = CGRect(x: head.x - 5, y: head.y - 5, width: 10, height: 10)
+                ctx.fillEllipse(in: headRect)
             }
         }
         ctx.restoreGState()

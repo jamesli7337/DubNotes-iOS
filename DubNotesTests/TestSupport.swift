@@ -45,9 +45,12 @@ enum Make {
 
     /// Points on a circle (page units).
     static func circle(cx: Double, cy: Double, r: Double, n: Int = 60, turns: Double = 1.02) -> [Pt] {
-        (0...n).map { i in
-            let a = Double(i) / Double(n) * Double.pi * 2 * turns
-            return Pt(cx + r * cos(a), cy + r * sin(a))
+        (0...n).map { (i: Int) -> Pt in
+            let fraction: Double = Double(i) / Double(n)
+            let a: Double = fraction * Double.pi * 2.0 * turns
+            let x: Double = cx + r * cos(a)
+            let y: Double = cy + r * sin(a)
+            return Pt(x, y)
         }
     }
 

@@ -7,7 +7,12 @@ final class ShapeRecognitionTests: XCTestCase {
     }
 
     func testStraightLineSnaps() throws {
-        let pts = (0...30).map { Pt(Double($0) * 10, 100 + Double($0) * 0.5) }
+        var pts: [Pt] = []
+        for i in 0...30 {
+            let x: Double = Double(i) * 10.0
+            let y: Double = 100.0 + Double(i) * 0.5
+            pts.append(Pt(x, y))
+        }
         let fit = try XCTUnwrap(recognize(pts))
         XCTAssertEqual(fit.shape, .line)
         XCTAssertEqual(fit.w, Geometry.dist(try item(pts, 0), try item(pts, 30)), accuracy: 0.5)
@@ -29,9 +34,10 @@ final class ShapeRecognitionTests: XCTestCase {
 
     func testAGentleCurveIsNotALine() {
         // a quarter circle bows far past 9% of its chord
-        let pts = (0...40).map { i -> Pt in
-            let a = Double(i) / 40 * Double.pi / 2
-            return Pt(100 * cos(a), 100 * sin(a))
+        var pts: [Pt] = []
+        for i in 0...40 {
+            let a: Double = Double(i) / 40.0 * Double.pi / 2.0
+            pts.append(Pt(100.0 * cos(a), 100.0 * sin(a)))
         }
         XCTAssertNotEqual(recognize(pts)?.shape, .line)
     }
@@ -46,7 +52,12 @@ final class ShapeRecognitionTests: XCTestCase {
     }
 
     func testWideEllipseKeepsItsAspect() throws {
-        let pts = Make.circle(cx: 300, cy: 300, r: 1).map { Pt(300 + ($0.x - 300) * 120, 300 + ($0.y - 300) * 50) }
+        var pts: [Pt] = []
+        for unit in Make.circle(cx: 300, cy: 300, r: 1) {
+            let dx: Double = unit.x - 300.0
+            let dy: Double = unit.y - 300.0
+            pts.append(Pt(300.0 + dx * 120.0, 300.0 + dy * 50.0))
+        }
         let fit = try XCTUnwrap(recognize(pts))
         XCTAssertEqual(fit.shape, .ellipse)
         XCTAssertGreaterThan(fit.w, fit.h * 2)
@@ -72,7 +83,12 @@ final class ShapeRecognitionTests: XCTestCase {
 
     func testAWaveLikeHandwritingDoesNotSnap() {
         // far from straight, and its ends are nowhere near each other, so it is neither a line nor a closed shape
-        let pts = (0...60).map { i in Pt(Double(i) * 5, 40 * sin(Double(i) * 0.25)) }
+        var pts: [Pt] = []
+        for i in 0...60 {
+            let x: Double = Double(i) * 5.0
+            let y: Double = 40.0 * sin(Double(i) * 0.25)
+            pts.append(Pt(x, y))
+        }
         XCTAssertNil(recognize(pts))
     }
 

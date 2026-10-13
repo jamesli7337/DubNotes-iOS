@@ -54,7 +54,10 @@ enum StrokeConverter {
         guard let first = pts.first, let last = pts.last else { return "empty" }
         let a = first.location, b = last.location
         func r(_ v: CGFloat) -> String { String(format: "%.2f", Double(v)) }
-        return "\(pk.ink.inkType)|\(n)|\(r(a.x)),\(r(a.y))|\(r(b.x)),\(r(b.y))"
+        let kind: String = String(describing: pk.ink.inkType)
+        let start: String = r(a.x) + "," + r(a.y)
+        let end: String = r(b.x) + "," + r(b.y)
+        return kind + "|" + String(n) + "|" + start + "|" + end
     }
 
     /// The signature `signature(_:)` gives the PencilKit stroke built from `s`, computed without building it.
@@ -64,7 +67,10 @@ enum StrokeConverter {
         // a lone sample becomes a two-point stroke offset by 0.1 (see pkStroke)
         let n = s.points.count == 1 ? 2 : s.points.count
         let end = s.points.count == 1 ? Pt(first.x + 0.1, first.y + 0.1) : Pt(last.x, last.y)
-        return "\(inkType(s.tool))|\(n)|\(r(first.x)),\(r(first.y))|\(r(end.x)),\(r(end.y))"
+        let kind: String = String(describing: inkType(s.tool))
+        let startText: String = r(first.x) + "," + r(first.y)
+        let endText: String = r(end.x) + "," + r(end.y)
+        return kind + "|" + String(n) + "|" + startText + "|" + endText
     }
 
     // MARK: PencilKit → model
@@ -88,7 +94,16 @@ enum StrokeConverter {
         print("[ink-debug] reconcile: canvas strokes=\(drawing.strokes.count) baseline=\(baseline.count)")
         for (i, pk) in drawing.strokes.enumerated() {
             let p = pk.path
-            print("[ink-debug]  stroke \(i): path.count=\(p.count) startIndex=\(p.startIndex) endIndex=\(p.endIndex) arrayCount=\(Array(p).count) sig=\(signature(pk)) identity=\(pk.transform.isIdentity) masks=\(pk.maskedPathRanges.count)")
+            var parts: [String] = []
+            parts.append("[ink-debug]  stroke " + String(i))
+            parts.append("path.count=" + String(p.count))
+            parts.append("startIndex=" + String(p.startIndex))
+            parts.append("endIndex=" + String(p.endIndex))
+            parts.append("arrayCount=" + String(Array(p).count))
+            parts.append("sig=" + signature(pk))
+            parts.append("identity=" + String(pk.transform.isIdentity))
+            parts.append("masks=" + String(pk.maskedPathRanges.count))
+            print(parts.joined(separator: " "))
         }
         for s in baseline { print("[ink-debug]  baseline \(s.id): points=\(s.points.count) sig=\(signature(of: s, paper: paper))") }
         var bySignature: [String: [Stroke]] = [:]
@@ -132,7 +147,8 @@ enum StrokeConverter {
     /// A moved / resized / partly erased version of a known stroke, always under fresh ids.
     private static func derived(from original: Stroke, transform: CGAffineTransform, masked: [ClosedRange<CGFloat>],
                                 createdAt: Double, keepId: Bool = false) -> [Stroke] {
-        let scale = Double((transform.a * transform.a + transform.b * transform.b).squareRoot())
+        let sumSq: CGFloat = transform.a * transform.a + transform.b * transform.b
+        let scale: Double = Double(sumSq.squareRoot())
         var moved = original
         moved.size = original.size * (scale > 0 ? scale : 1)
         moved.createdAt = createdAt
@@ -157,7 +173,10 @@ enum StrokeConverter {
 
     private static func fresh(_ pk: PKStroke, pageId: String, notebookId: String, paper: Paper,
                               tool: Stroke.Tool, nib: Double, createdAt: Double) -> Stroke {
-        let scale = Double((pk.transform.a * pk.transform.a + pk.transform.b * pk.transform.b).squareRoot())
+        let ta: CGFloat = pk.transform.a
+        let tb: CGFloat = pk.transform.b
+        let sumSq: CGFloat = ta * ta + tb * tb
+        let scale: Double = Double(sumSq.squareRoot())
         let k = scale > 0 ? scale : 1
         let nominal = max(nib * k, 0.1)
         var pts: [StrokePoint] = []

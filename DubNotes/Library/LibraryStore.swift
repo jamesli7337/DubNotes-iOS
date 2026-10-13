@@ -68,7 +68,10 @@ final class LibraryStore {
             notebooks.append(m.notebook)
         }
         if !unreadable.isEmpty {
-            loadError = "\(unreadable.count) notebook folder\(unreadable.count == 1 ? "" : "s") could not be read and \(unreadable.count == 1 ? "was" : "were") left untouched."
+            let count: Int = unreadable.count
+            let plural: String = count == 1 ? "" : "s"
+            let verb: String = count == 1 ? "was" : "were"
+            loadError = String(count) + " notebook folder" + plural + " could not be read and " + verb + " left untouched."
             // an unreadable notebook must not hide the readable ones
             if !notebooks.isEmpty { loadError = nil }
         }

@@ -26,7 +26,10 @@ enum ImageImport {
     /// Nil when the data isn't an image iOS can decode.
     static func load(_ data: Data) -> Loaded? {
         guard let image = UIImage(data: data) else { return nil }
-        let w = Double(image.size.width * image.scale), h = Double(image.size.height * image.scale) // oriented, in pixels
+        let pxW: CGFloat = image.size.width * image.scale // oriented, in pixels
+        let pxH: CGFloat = image.size.height * image.scale
+        let w: Double = Double(pxW)
+        let h: Double = Double(pxH)
         guard w > 0, h > 0 else { return nil }
         let kind = sniff(data)
         let tooBig = max(w, h) > PageSizing.imageMaxEdge || data.count > PageSizing.keepOriginalBytes

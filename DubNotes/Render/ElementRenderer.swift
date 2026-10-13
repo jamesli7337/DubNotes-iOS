@@ -2,7 +2,10 @@ import UIKit
 
 extension UIColor {
     convenience init(_ c: RGB) {
-        self.init(red: CGFloat(c.r / 255), green: CGFloat(c.g / 255), blue: CGFloat(c.b / 255), alpha: CGFloat(c.a))
+        let red: CGFloat = CGFloat(c.r / 255.0)
+        let green: CGFloat = CGFloat(c.g / 255.0)
+        let blue: CGFloat = CGFloat(c.b / 255.0)
+        self.init(red: red, green: green, blue: blue, alpha: CGFloat(c.a))
     }
 
     /// `#rgb` / `#rrggbb`; anything unreadable is black, like the web's export.
@@ -15,7 +18,10 @@ extension UIColor {
         // resolve in the light trait so dynamic colours give one stable answer
         let resolved = resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))
         resolved.getRed(&r, green: &g, blue: &b, alpha: &a)
-        return RGB(Double(r * 255), Double(g * 255), Double(b * 255), Double(a))
+        let r255: Double = Double(r * 255)
+        let g255: Double = Double(g * 255)
+        let b255: Double = Double(b * 255)
+        return RGB(r255, g255, b255, Double(a))
     }
 }
 
@@ -107,7 +113,8 @@ enum ElementRenderer {
         ctx.saveGState()
         ctx.setAlpha(opacity)
         if el.rotation != 0 {
-            let cx = CGFloat(el.x + el.w / 2), cy = CGFloat(el.y + el.h / 2)
+            let cx: CGFloat = CGFloat(el.x + el.w / 2.0)
+            let cy: CGFloat = CGFloat(el.y + el.h / 2.0)
             ctx.translateBy(x: cx, y: cy)
             ctx.rotate(by: CGFloat(el.rotation))
             ctx.translateBy(x: -cx, y: -cy)

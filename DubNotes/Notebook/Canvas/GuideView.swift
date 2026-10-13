@@ -172,31 +172,42 @@ final class GuideView: UIView {
     private func drawRuler(_ ctx: CGContext, body: UIColor, edge: UIColor, ink: UIColor) {
         let w = CGFloat(GuideGeometry.rulerLength), h = CGFloat(GuideGeometry.rulerThickness)
         let path = UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: w, height: h), cornerRadius: 4)
+        let hairline: CGFloat = 1 / max(zoom, 0.1)
+        let heavy: CGFloat = 1.4 / max(zoom, 0.1)
         body.setFill(); path.fill()
-        edge.setStroke(); path.lineWidth = 1 / max(zoom, 0.1); path.stroke()
+        edge.setStroke(); path.lineWidth = hairline; path.stroke()
         ink.setStroke()
+        let width: Double = Double(w)
         // top: millimetres, longer at 5 mm and 1 cm, numbered every centimetre
         var mm = 0
-        while Double(mm) * GuideGeometry.pxPerCm / 10 <= Double(w) {
-            let x = CGFloat(Double(mm) * GuideGeometry.pxPerCm / 10)
-            let cm = mm % 10 == 0
+        while true {
+            let mmX: Double = Double(mm) * GuideGeometry.pxPerCm / 10.0
+            if mmX > width { break }
+            let x: CGFloat = CGFloat(mmX)
+            let cm: Bool = mm % 10 == 0
             let len: CGFloat = cm ? 18 : (mm % 5 == 0 ? 12 : 7)
-            ctx.setLineWidth((cm ? 1.4 : 1) / max(zoom, 0.1))
+            ctx.setLineWidth(cm ? heavy : hairline)
             ctx.move(to: CGPoint(x: x, y: 0)); ctx.addLine(to: CGPoint(x: x, y: len)); ctx.strokePath()
-            if cm && mm == 0 { label("cm", at: CGPoint(x: x + 3, y: 27), color: ink, size: 9, anchorLeft: true) }
-            else if cm { label("\(mm / 10)", at: CGPoint(x: x, y: 27), color: ink) }
+            let labelX: CGFloat = x + 3
+            if cm && mm == 0 { label("cm", at: CGPoint(x: labelX, y: 27), color: ink, size: 9, anchorLeft: true) }
+            else if cm { label(String(mm / 10), at: CGPoint(x: x, y: 27), color: ink) }
             mm += 1
         }
         // bottom: sixteenths of an inch
         var s = 0
-        while Double(s) * GuideGeometry.pxPerInch / 16 <= Double(w) {
-            let x = CGFloat(Double(s) * GuideGeometry.pxPerInch / 16)
-            let inch = s % 16 == 0
+        let labelY: CGFloat = h - 25
+        while true {
+            let sX: Double = Double(s) * GuideGeometry.pxPerInch / 16.0
+            if sX > width { break }
+            let x: CGFloat = CGFloat(sX)
+            let inch: Bool = s % 16 == 0
             let len: CGFloat = inch ? 18 : (s % 8 == 0 ? 13 : (s % 4 == 0 ? 9 : 5))
-            ctx.setLineWidth((inch ? 1.4 : 1) / max(zoom, 0.1))
-            ctx.move(to: CGPoint(x: x, y: h)); ctx.addLine(to: CGPoint(x: x, y: h - len)); ctx.strokePath()
-            if inch && s == 0 { label("in", at: CGPoint(x: x + 3, y: h - 25), color: ink, size: 9, anchorLeft: true) }
-            else if inch { label("\(s / 16)", at: CGPoint(x: x, y: h - 25), color: ink) }
+            let tickTop: CGFloat = h - len
+            ctx.setLineWidth(inch ? heavy : hairline)
+            ctx.move(to: CGPoint(x: x, y: h)); ctx.addLine(to: CGPoint(x: x, y: tickTop)); ctx.strokePath()
+            let labelX: CGFloat = x + 3
+            if inch && s == 0 { label("in", at: CGPoint(x: labelX, y: labelY), color: ink, size: 9, anchorLeft: true) }
+            else if inch { label(String(s / 16), at: CGPoint(x: x, y: labelY), color: ink) }
             s += 1
         }
     }
@@ -211,23 +222,34 @@ final class GuideView: UIView {
         body.setFill(); path.fill()
         edge.setStroke(); path.lineWidth = 1 / max(zoom, 0.1); path.stroke()
         func on(_ deg: Double, _ r: CGFloat) -> CGPoint {
-            let a = CGFloat(deg * Double.pi / 180)
-            return CGPoint(x: R + r * cos(a), y: R - r * sin(a))
+            let a: CGFloat = CGFloat(deg * Double.pi / 180.0)
+            let px: CGFloat = R + r * cos(a)
+            let py: CGFloat = R - r * sin(a)
+            return CGPoint(x: px, y: py)
         }
         ink.setStroke()
         // guide rays every 10°, stopping short of the inner scale; the 0° / 90° / 180° axes are heavier
+        let hair: CGFloat = 1 / max(zoom, 0.1)
         for deg in stride(from: 0.0, through: 180.0, by: 10.0) {
-            ctx.setLineWidth((deg.truncatingRemainder(dividingBy: 90) == 0 ? 1.4 : 0.6) / max(zoom, 0.1))
-            ctx.move(to: CGPoint(x: R, y: R)); ctx.addLine(to: on(deg, R - 64)); ctx.strokePath()
+            let isAxis: Bool = deg.truncatingRemainder(dividingBy: 90) == 0
+            ctx.setLineWidth(isAxis ? hair * 1.4 : hair * 0.6)
+            let rayEnd: CGPoint = on(deg, R - 64)
+            ctx.move(to: CGPoint(x: R, y: R)); ctx.addLine(to: rayEnd); ctx.strokePath()
         }
         for deg in 0...180 {
-            let ten = deg % 10 == 0
+            let ten: Bool = deg % 10 == 0
             let len: CGFloat = ten ? 22 : (deg % 5 == 0 ? 14 : 7)
-            ctx.setLineWidth((ten ? 1.4 : 1) / max(zoom, 0.1))
-            ctx.move(to: on(Double(deg), R)); ctx.addLine(to: on(Double(deg), R - len)); ctx.strokePath()
+            let d: Double = Double(deg)
+            ctx.setLineWidth(ten ? hair * 1.4 : hair)
+            let outer: CGPoint = on(d, R)
+            let inner: CGPoint = on(d, R - len)
+            ctx.move(to: outer); ctx.addLine(to: inner); ctx.strokePath()
             if ten {
-                label("\(deg)", at: on(Double(deg), R - 36), color: ink)
-                if deg > 0 && deg < 180 { label("\(180 - deg)", at: on(Double(deg), R - 56), color: ink.withAlphaComponent(0.7), size: 8) }
+                label(String(deg), at: on(d, R - 36), color: ink)
+                if deg > 0 && deg < 180 {
+                    let faint: UIColor = ink.withAlphaComponent(0.7)
+                    label(String(180 - deg), at: on(d, R - 56), color: faint, size: 8)
+                }
             }
         }
         // inner arc separating the two scales, and the origin ring on the baseline's midpoint
@@ -246,7 +268,8 @@ final class GuideView: UIView {
         let g = gripPoint
         let r: CGFloat = 12
         UIColor(c.accent).setFill()
-        ctx.fillEllipse(in: CGRect(x: g.x - r, y: g.y - r, width: r * 2, height: r * 2))
+        let gripRect = CGRect(x: g.x - r, y: g.y - r, width: r * 2, height: r * 2)
+        ctx.fillEllipse(in: gripRect)
         let arrows = UIImage(systemName: "arrow.triangle.2.circlepath")?.withTintColor(UIColor(c.onAccent), renderingMode: .alwaysOriginal)
         arrows?.draw(in: CGRect(x: g.x - 7, y: g.y - 7, width: 14, height: 14))
         if geometry.kind == .protractor || rotating {
@@ -255,7 +278,11 @@ final class GuideView: UIView {
                                                         .foregroundColor: UIColor(c.onAccent)]
             let s = text as NSString
             let sz = s.size(withAttributes: attrs)
-            let pill = CGRect(x: g.x - sz.width / 2 - 8, y: g.y + r + 4, width: sz.width + 16, height: sz.height + 4)
+            let pillX: CGFloat = g.x - sz.width / 2 - 8
+            let pillY: CGFloat = g.y + r + 4
+            let pillW: CGFloat = sz.width + 16
+            let pillH: CGFloat = sz.height + 4
+            let pill = CGRect(x: pillX, y: pillY, width: pillW, height: pillH)
             UIColor(c.accent).setFill()
             UIBezierPath(roundedRect: pill, cornerRadius: pill.height / 2).fill()
             s.draw(at: CGPoint(x: pill.minX + 8, y: pill.minY + 2), withAttributes: attrs)

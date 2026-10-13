@@ -75,7 +75,9 @@ enum PaperRenderer {
                     let text = "This page couldn't be rendered" as NSString
                     let size = text.size(withAttributes: attrs)
                     UIGraphicsPushContext(ctx)
-                    text.draw(at: CGPoint(x: (w - Double(size.width)) / 2, y: (h - Double(size.height)) / 2), withAttributes: attrs)
+                    let tx: Double = (w - Double(size.width)) / 2.0
+                    let ty: Double = (h - Double(size.height)) / 2.0
+                    text.draw(at: CGPoint(x: tx, y: ty), withAttributes: attrs)
                     UIGraphicsPopContext()
                 } else {
                     ctx.setFillColor(UIColor(white: 0.5, alpha: 0.08).cgColor)
