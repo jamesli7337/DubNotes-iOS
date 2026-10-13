@@ -3,7 +3,7 @@ import SwiftUI
 struct RootView: View {
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
     @Environment(\.scenePhase) private var scenePhase
-    @State private var store = LibraryStore()
+    @State private var store = AppLaunch.makeStore()
 
     var body: some View {
         LibraryView(store: store)

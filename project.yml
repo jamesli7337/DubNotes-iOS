@@ -40,3 +40,28 @@ targets:
         SWIFT_VERSION: "5.0"
         CODE_SIGNING_ALLOWED: "NO"
         GENERATE_INFOPLIST_FILE: "YES"
+  DubNotesUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - DubNotesUITests
+    dependencies:
+      - target: DubNotes
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jamesli.dubnotes.uitests
+        SWIFT_VERSION: "5.0"
+        CODE_SIGNING_ALLOWED: "NO"
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_TARGET_NAME: DubNotes
+# A separate scheme, so the screenshot tour never runs as part of the normal test step.
+schemes:
+  DubNotesTour:
+    build:
+      targets:
+        DubNotes: all
+        DubNotesUITests: [test]
+    test:
+      targets:
+        - DubNotesUITests

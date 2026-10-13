@@ -40,6 +40,35 @@ jobs:
             -default-test-execution-time-allowance 60 \
             -resultBundlePath build/test.xcresult \
             CODE_SIGNING_ALLOWED=NO
+      - name: Screenshot tour
+        if: always()
+        run: |
+          UDID=$(xcrun simctl list devices available | grep -m1 iPad | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}')
+          if [ -z "$UDID" ]; then
+            echo "No available iPad simulator found"
+            exit 1
+          fi
+          rm -rf build/tour.xcresult build/tour
+          xcodebuild test \
+            -project DubNotes.xcodeproj \
+            -scheme DubNotesTour \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath build \
+            -resultBundlePath build/tour.xcresult \
+            CODE_SIGNING_ALLOWED=NO || echo "tour test run failed (screenshots are still exported below)"
+          mkdir -p build/tour
+          if [ -d build/tour.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/tour.xcresult --output-path build/tour || echo "xcresulttool export attachments failed"
+          fi
+          ls -la build/tour | head -n 80
+      - name: Upload tour screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tour
+          path: build/tour/
+          retention-days: 3
+          if-no-files-found: warn
       - name: Test diagnostics
         if: always()
         run: |
