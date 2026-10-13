@@ -10,8 +10,6 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - DubNotes
-      - path: DubNotesTests/Fixtures/backup-sample.json
-        buildPhase: resources
     scheme:
       testTargets:
         - DubNotesTests
