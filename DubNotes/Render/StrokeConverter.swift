@@ -81,6 +81,11 @@ enum StrokeConverter {
         var baseline: [Stroke]
     }
 
+    /// The stroke's creation time in whole milliseconds since 1970, as written by `pkStroke`.
+    static func creationMillis(_ pk: PKStroke) -> Int {
+        Int((pk.path.creationDate.timeIntervalSince1970 * 1000).rounded())
+    }
+
     /// Rebuilds the stroke list from PencilKit's drawing after an edit.
     ///
     /// `baseline` is the stroke list the canvas drawing was built from (plus anything reconciled since).
@@ -106,8 +111,18 @@ enum StrokeConverter {
             print(parts.joined(separator: " "))
         }
         for s in baseline { print("[ink-debug]  baseline \(s.id): points=\(s.points.count) sig=\(signature(of: s, paper: paper))") }
-        var bySignature: [String: [Stroke]] = [:]
-        for s in baseline { bySignature[signature(of: s, paper: paper), default: []].append(s) }
+        // Pairing is by identity, never by position. Two strokes can have identical geometry (the same word written
+        // twice), so the signature alone cannot tell them apart. The creation timestamp can: it is written into each
+        // stroke's PKStrokePath (`creationDate`, from the model's createdAt) and PencilKit keeps it through erase,
+        // move, resize and reorder. A stroke is looked up by (signature + creation millisecond) first; only if that
+        // finds nothing (an older drawing, a timestamp PencilKit rewrote) does it fall back to the signature alone.
+        var exact: [String: [Stroke]] = [:]
+        var loose: [String: [Stroke]] = [:]
+        for s in baseline {
+            let sig = signature(of: s, paper: paper)
+            exact[sig + "@" + String(Int(s.createdAt.rounded())), default: []].append(s)
+            loose[sig, default: []].append(s)
+        }
         var used = Set<String>()
         var model: [Stroke] = []
         var nextBaseline: [Stroke] = []
@@ -116,7 +131,10 @@ enum StrokeConverter {
         for pk in drawing.strokes {
             let sig = signature(pk)
             let unchanged = pk.transform.isIdentity && erasedRanges(pk).isEmpty
-            if let original = bySignature[sig]?.first(where: { !used.contains($0.id) }) {
+            let stamped: String = sig + "@" + String(creationMillis(pk))
+            let exactPick: Stroke? = exact[stamped]?.first(where: { !used.contains($0.id) })
+            let loosePick: Stroke? = loose[sig]?.first(where: { !used.contains($0.id) })
+            if let original = exactPick ?? loosePick {
                 used.insert(original.id)
                 nextBaseline.append(original)
                 if unchanged {
@@ -124,7 +142,7 @@ enum StrokeConverter {
                 } else {
                     model += derived(from: original, transform: pk.transform, masked: erasedRanges(pk), createdAt: original.createdAt)
                 }
-            } else if let original = bySignature[sig]?.first {
+            } else if let original = exact[stamped]?.first ?? loose[sig]?.first {
                 // a duplicate of a stroke already matched (a copy made inside PencilKit)
                 var twin = original
                 twin.id = UUID().uuidString

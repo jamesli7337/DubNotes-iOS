@@ -107,6 +107,86 @@ final class RenderingTests: ScratchTestCase {
         XCTAssertEqual(StrokeConverter.signature(of: hi, paper: paper), StrokeConverter.signature(StrokeConverter.pkStroke(hi, paper: paper)))
     }
 
+    // MARK: Identity through edits (strokes with identical shapes must not be swapped)
+
+    /// Three strokes with the same shape, told apart only by when they were drawn.
+    private func trio() -> [Stroke] { [wave("a", at: 10), wave("b", at: 20), wave("c", at: 30)] }
+
+    private func canvas(_ strokes: [Stroke]) -> [PKStroke] { StrokeConverter.drawing(strokes, paper: paper).strokes }
+
+    private func ids(_ r: StrokeConverter.Reconciled) -> [String] { r.strokes.map { $0.id } }
+
+    func testErasingTheFirstMiddleOrLastOfThreeKeepsTheRightTwo() throws {
+        let s = trio()
+        let pk = canvas(s)
+        XCTAssertEqual(pk.count, 3)
+        XCTAssertEqual(ids(reconcile(PKDrawing(strokes: [pk[1], pk[2]]), baseline: s)), ["b", "c"])
+        XCTAssertEqual(ids(reconcile(PKDrawing(strokes: [pk[0], pk[2]]), baseline: s)), ["a", "c"])
+        XCTAssertEqual(ids(reconcile(PKDrawing(strokes: [pk[0], pk[1]]), baseline: s)), ["a", "b"])
+    }
+
+    func testErasingTwoLeavesTheThird() throws {
+        let s = trio()
+        let pk = canvas(s)
+        XCTAssertEqual(ids(reconcile(PKDrawing(strokes: [pk[0]]), baseline: s)), ["a"])
+        XCTAssertEqual(ids(reconcile(PKDrawing(strokes: [pk[1]]), baseline: s)), ["b"])
+        XCTAssertEqual(ids(reconcile(PKDrawing(strokes: [pk[2]]), baseline: s)), ["c"])
+        XCTAssertEqual(ids(reconcile(PKDrawing(strokes: []), baseline: s)), [])
+    }
+
+    func testErasingAndAddingTogetherKeepsSurvivorsAndMakesOneNewRecord() throws {
+        let s = trio()
+        let pk = canvas(s)
+        let drawn = Make.stroke("temp", points: [(100, 100), (110, 120), (130, 125)], color: "#dc2626", size: 4, at: 99_000)
+        let r = reconcile(PKDrawing(strokes: [pk[1], pk[2], StrokeConverter.pkStroke(drawn, paper: paper)]), baseline: s)
+        XCTAssertEqual(r.strokes.count, 3)
+        XCTAssertEqual(Array(ids(r).prefix(2)), ["b", "c"])
+        let new = try item(r.strokes, 2)
+        XCTAssertFalse(["a", "b", "c", "temp"].contains(new.id))
+        XCTAssertEqual(new.color, "#dc2626")
+        XCTAssertEqual(r.baseline.count, 3)
+    }
+
+    func testMovingOneStrokeWhileAnotherIsErased() throws {
+        let s = trio()
+        let pk = canvas(s)
+        let moved = try XCTUnwrap(PKDrawing(strokes: [pk[2]]).transformed(using: CGAffineTransform(translationX: 100, y: 0)).strokes.first)
+        // "a" erased, "b" untouched, "c" moved
+        let r = reconcile(PKDrawing(strokes: [pk[1], moved]), baseline: s)
+        XCTAssertEqual(r.strokes.count, 2)
+        XCTAssertEqual(try item(r.strokes, 0), s[1]) // b is exactly as it was
+        let c = try item(r.strokes, 1)
+        XCTAssertNotEqual(c.id, "a")
+        XCTAssertNotEqual(c.id, "b")
+        XCTAssertEqual(try item(c.points, 0).x, 110, accuracy: 1e-3) // c's own points, shifted by 100
+        XCTAssertEqual(c.createdAt, 30)
+    }
+
+    func testDrawingOrderSurvivesAnEraseAnAddAndAMove() throws {
+        let s = trio()
+        let pk = canvas(s)
+        let drawn = Make.stroke("temp", points: [(100, 100), (110, 120), (130, 125)], color: "#dc2626", size: 4, at: 99_000)
+        let moved = try XCTUnwrap(PKDrawing(strokes: [pk[0]]).transformed(using: CGAffineTransform(translationX: 5, y: 5)).strokes.first)
+        let first = reconcile(PKDrawing(strokes: [moved, pk[2], StrokeConverter.pkStroke(drawn, paper: paper)]), baseline: s)
+        // order follows the canvas: moved a, c, new
+        XCTAssertEqual(first.strokes.count, 3)
+        XCTAssertEqual(try item(first.strokes, 1).id, "c")
+        XCTAssertEqual(try item(first.strokes, 0).createdAt, 10)
+        XCTAssertGreaterThan(try item(first.strokes, 2).createdAt, 30)
+        // reconciling the same canvas again against what it returned changes nothing
+        let again = reconcile(PKDrawing(strokes: [moved, pk[2], StrokeConverter.pkStroke(drawn, paper: paper)]), baseline: first.baseline)
+        XCTAssertEqual(again.strokes.map { $0.points.count }, first.strokes.map { $0.points.count })
+        XCTAssertEqual(try item(again.strokes, 1).id, "c")
+    }
+
+    func testStrokesWithDifferentShapesAreAlsoKeptApart() throws {
+        let a = Make.stroke("a", points: [(0, 0), (10, 0), (20, 0)], color: "#2563eb", size: 4, at: 1)
+        let b = Make.stroke("b", points: [(0, 50), (10, 60), (20, 50)], color: "#2563eb", size: 4, at: 2)
+        let pk = canvas([a, b])
+        XCTAssertEqual(ids(reconcile(PKDrawing(strokes: [pk[1]]), baseline: [a, b])), ["b"])
+        XCTAssertEqual(ids(reconcile(PKDrawing(strokes: [pk[0]]), baseline: [a, b])), ["a"])
+    }
+
     // MARK: Page rendering
 
     func testAPageRendersAtTheRequestedScale() {
