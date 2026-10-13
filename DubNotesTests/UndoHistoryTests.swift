@@ -41,7 +41,7 @@ final class UndoHistoryTests: XCTestCase {
         XCTAssertEqual(doc.strokes(of: "p1").map(\.id), ["new"])
     }
 
-    func testReplaceRoundTrip() {
+    func testReplaceRoundTrip() throws {
         let doc = Make.document(pages: 2)
         let before = PageItem.element(Make.text("t", x: 0))
         let after = PageItem.element(Make.text("t", x: 50))
@@ -49,14 +49,14 @@ final class UndoHistoryTests: XCTestCase {
         doc.replaceItems(on: "p1", with: [after])
         let op = EditOp.replaceItems(pageId: "p1", before: [before], after: [after])
         doc.revert(op)
-        XCTAssertEqual(doc.elements(of: "p1")[0].x, 0)
+        XCTAssertEqual(try item(doc.elements(of: "p1"), 0).x, 0)
         doc.apply(op)
-        XCTAssertEqual(doc.elements(of: "p1")[0].x, 50)
+        XCTAssertEqual(try item(doc.elements(of: "p1"), 0).x, 50)
     }
 
-    func testEditSwapsRemovedAndAdded() {
+    func testEditSwapsRemovedAndAdded() throws {
         let doc = Make.document(pages: 2)
-        let old = PageItem.stroke(doc.strokes(of: "p0")[0])
+        let old = PageItem.stroke(try item(doc.strokes(of: "p0"), 0))
         let piece1 = PageItem.stroke(Make.stroke("a", page: "p0", points: [(0, 0), (3, 0)]))
         let piece2 = PageItem.stroke(Make.stroke("b", page: "p0", points: [(6, 0), (10, 0)]))
         let op = EditOp.edit(pageId: "p0", removed: [old], added: [piece1, piece2])

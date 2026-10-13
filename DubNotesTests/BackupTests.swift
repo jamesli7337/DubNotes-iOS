@@ -39,15 +39,15 @@ final class BackupTests: XCTestCase {
         XCTAssertEqual(b.dividers.count, 1)
         XCTAssertEqual(b.assets.count, 1)
 
-        XCTAssertEqual(b.notebooks[0].cover, Notebook.Cover(color: "#3366aa", pattern: "dots"))
-        XCTAssertTrue(b.notebooks[1].isBoard)
-        XCTAssertEqual(b.pages[2].background, .pdf(assetId: "a1", page: 2))
-        XCTAssertEqual(b.pages[2].pageWidth, 612)
-        XCTAssertEqual(b.pages[0].pageWidth, PageUnits.width)
-        XCTAssertEqual(b.pages[0].pageHeight, PageUnits.height)
-        XCTAssertEqual(b.pages[3].col, 0)
-        XCTAssertEqual(b.strokes[0].points[1], StrokePoint(x: 12.5, y: 24.25, pressure: 0.75))
-        XCTAssertEqual(b.assets[0].data, Data("%PDF-1.4\n".utf8))
+        XCTAssertEqual(try item(b.notebooks, 0).cover, Notebook.Cover(color: "#3366aa", pattern: "dots"))
+        XCTAssertTrue(try item(b.notebooks, 1).isBoard)
+        XCTAssertEqual(try item(b.pages, 2).background, .pdf(assetId: "a1", page: 2))
+        XCTAssertEqual(try item(b.pages, 2).pageWidth, 612)
+        XCTAssertEqual(try item(b.pages, 0).pageWidth, PageUnits.width)
+        XCTAssertEqual(try item(b.pages, 0).pageHeight, PageUnits.height)
+        XCTAssertEqual(try item(b.pages, 3).col, 0)
+        XCTAssertEqual(try item(try item(b.strokes, 0).points, 1), StrokePoint(x: 12.5, y: 24.25, pressure: 0.75))
+        XCTAssertEqual(try item(b.assets, 0).data, Data("%PDF-1.4\n".utf8))
 
         var kinds = Set<String>()
         for e in b.elements {
@@ -113,17 +113,17 @@ final class BackupTests: XCTestCase {
 
     func testV1ToV2MovesTemplateOntoPages() throws {
         let b = try decode(Self.v1).backup
-        XCTAssertEqual(b.pages[0].paper, Paper(template: .ruled, spacing: .medium, color: .white))
-        XCTAssertEqual(b.pages[1].paper, Paper(template: .grid, spacing: .medium, color: .white))
-        XCTAssertEqual(b.pages[2].paper, Paper.default)
+        XCTAssertEqual(try item(b.pages, 0).paper, Paper(template: .ruled, spacing: .medium, color: .white))
+        XCTAssertEqual(try item(b.pages, 1).paper, Paper(template: .grid, spacing: .medium, color: .white))
+        XCTAssertEqual(try item(b.pages, 2).paper, Paper.default)
     }
 
     func testV1UpgradeAlsoAppliesLaterSteps() throws {
         let r = try decode(Self.v1)
         XCTAssertEqual(r.sourceVersion, 1)
-        XCTAssertEqual(r.backup.strokes[0].color, "auto")          // v3
+        XCTAssertEqual(try item(r.backup.strokes, 0).color, "auto")          // v3
         XCTAssertTrue(r.backup.elements.isEmpty)                    // v4: missing array
-        XCTAssertNil(r.backup.notebooks[0].folderId)                // v6
+        XCTAssertNil(try item(r.backup.notebooks, 0).folderId)                // v6
         // v6: ordered most-recently-edited first: n2 (9), n1 (5), n3 (2)
         XCTAssertEqual(r.backup.notebooks.map(\.order), [1, 0, 2])
     }
@@ -143,7 +143,7 @@ final class BackupTests: XCTestCase {
         {"app":"noteapp","version":3,"notebooks":[],"pages":[],
          "strokes":[{"id":"s1","pageId":"p","notebookId":"n","tool":"pen","color":"#1f2530","size":3,"points":[],"createdAt":1}]}
         """).backup
-        XCTAssertEqual(b.strokes[0].color, "#1f2530")
+        XCTAssertEqual(try item(b.strokes, 0).color, "#1f2530")
     }
 
     func testV3ToV4DefaultsMissingRotation() throws {
@@ -152,7 +152,7 @@ final class BackupTests: XCTestCase {
          "elements":[{"id":"e1","pageId":"p","notebookId":"n","kind":"tape","x":0,"y":0,"w":10,"h":10,
                       "createdAt":1,"color":"#fff"}]}
         """).backup
-        XCTAssertEqual(b.elements[0].rotation, 0)
+        XCTAssertEqual(try item(b.elements, 0).rotation, 0)
     }
 
     func testV5ToV6RepairsFoldersOrderAndOrphans() throws {
@@ -170,7 +170,7 @@ final class BackupTests: XCTestCase {
            {"id":"d1","folderId":"missing","label":"L","order":0,"createdAt":1},
            {"id":"d2","folderId":"f1","label":"M","order":1,"createdAt":1}]}
         """).backup
-        XCTAssertNil(b.notebooks[0].folderId)
+        XCTAssertNil(try item(b.notebooks, 0).folderId)
         XCTAssertEqual(b.notebooks.map(\.order), [1, 0])
         XCTAssertEqual(b.folders.map(\.parentId), [nil, nil, "f1"])
         XCTAssertEqual(b.dividers.map(\.folderId), [nil, "f1"])
@@ -182,7 +182,7 @@ final class BackupTests: XCTestCase {
             let r = try BackupCodec.decode(fixtureData().replacingVersion(with: v))
             XCTAssertEqual(r.sourceVersion, v)
             XCTAssertEqual(r.backup.elements.count, 7)
-            XCTAssertEqual(r.backup.notebooks[0].folderId, "f2")
+            XCTAssertEqual(try item(r.backup.notebooks, 0).folderId, "f2")
         }
     }
 
@@ -198,8 +198,8 @@ final class BackupTests: XCTestCase {
         """)
         XCTAssertEqual(r.backup.elements.map(\.id), ["e2"])
         XCTAssertEqual(r.warnings.count, 2)
-        XCTAssertTrue(r.warnings[0].contains("hologram"))
-        XCTAssertTrue(r.warnings[0].contains("e1"))
+        XCTAssertTrue(try item(r.warnings, 0).contains("hologram"))
+        XCTAssertTrue(try item(r.warnings, 0).contains("e1"))
     }
 
     // MARK: Errors

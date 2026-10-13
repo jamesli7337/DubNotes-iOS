@@ -40,15 +40,15 @@ final class RenderingTests: ScratchTestCase {
         XCTAssertEqual(reconcile(StrokeConverter.drawing([s], paper: paper), baseline: [s]).strokes.first?.color, "auto")
     }
 
-    func testAStrokeThePencilAddedBecomesANewRecord() {
+    func testAStrokeThePencilAddedBecomesANewRecord() throws {
         let a = wave("a")
         var strokes = StrokeConverter.drawing([a], paper: paper).strokes
         let drawn = Make.stroke("temp", points: [(100, 100), (110, 120), (130, 125)], color: "#dc2626", size: 4)
         strokes.append(StrokeConverter.pkStroke(drawn, paper: paper)) // stands in for what PencilKit reports
         let r = reconcile(PKDrawing(strokes: strokes), baseline: [a])
         XCTAssertEqual(r.strokes.count, 2)
-        XCTAssertEqual(r.strokes[0], a)
-        let new = r.strokes[1]
+        XCTAssertEqual(try item(r.strokes, 0), a)
+        let new = try item(r.strokes, 1)
         XCTAssertNotEqual(new.id, "temp")
         XCTAssertEqual(new.pageId, "p1")
         XCTAssertEqual(new.notebookId, "nb1")
@@ -56,35 +56,35 @@ final class RenderingTests: ScratchTestCase {
         XCTAssertEqual(new.color, "#dc2626")
         XCTAssertEqual(new.size, 4, accuracy: 1e-6)
         XCTAssertEqual(new.points.count, 3)
-        XCTAssertEqual(new.points[1].x, 110, accuracy: 1e-6)
+        XCTAssertEqual(try item(new.points, 1).x, 110, accuracy: 1e-6)
         XCTAssertEqual(new.createdAt, 5000)
         XCTAssertEqual(r.baseline.count, 2) // the next edit matches it by its own points
     }
 
-    func testAnErasedStrokeIsGone() {
+    func testAnErasedStrokeIsGone() throws {
         let a = wave("a"), b = wave("b", at: 2)
         let all = StrokeConverter.drawing([a, b], paper: paper).strokes
-        let r = reconcile(PKDrawing(strokes: [all[1]]), baseline: [a, b])
+        let r = reconcile(PKDrawing(strokes: [try item(all, 1)]), baseline: [a, b])
         XCTAssertEqual(r.strokes.map(\.id), ["b"])
     }
 
-    func testAMovedStrokeKeepsItsPressureProfileAndGetsANewId() {
+    func testAMovedStrokeKeepsItsPressureProfileAndGetsANewId() throws {
         var s = wave("a")
         s.points = s.points.enumerated().map { StrokePoint(x: $1.x, y: $1.y, pressure: Double($0) / 4) }
         let moved = StrokeConverter.drawing([s], paper: paper).transformed(using: CGAffineTransform(translationX: 100, y: 50))
         let r = reconcile(moved, baseline: [s])
-        let out = r.strokes[0]
+        let out = try item(r.strokes, 0)
         XCTAssertNotEqual(out.id, "a")
         XCTAssertEqual(out.points.map(\.pressure), s.points.map(\.pressure))
-        XCTAssertEqual(out.points[0].x, 110, accuracy: 1e-3)
-        XCTAssertEqual(out.points[0].y, 60, accuracy: 1e-3)
+        XCTAssertEqual(try item(out.points, 0).x, 110, accuracy: 1e-3)
+        XCTAssertEqual(try item(out.points, 0).y, 60, accuracy: 1e-3)
     }
 
-    func testAResizedStrokeScalesItsPoints() {
+    func testAResizedStrokeScalesItsPoints() throws {
         let s = wave("a")
         let big = StrokeConverter.drawing([s], paper: paper).transformed(using: CGAffineTransform(scaleX: 2, y: 2))
-        let out = reconcile(big, baseline: [s]).strokes[0]
-        XCTAssertEqual(out.points[4].x, 100, accuracy: 1e-3)
+        let out = try item(reconcile(big, baseline: [s]).strokes, 0)
+        XCTAssertEqual(try item(out.points, 4).x, 100, accuracy: 1e-3)
     }
 
     func testAHighlighterStaysAHighlighter() {
@@ -165,7 +165,7 @@ final class RenderingTests: ScratchTestCase {
                        PageRenderer.Source(page: landscape, strokes: [], elements: [])]
         let data = Exporter.pdfData(sources: sources, title: "Test")
         XCTAssertEqual(String(decoding: data.prefix(5), as: UTF8.self), "%PDF-")
-        let doc = try XCTUnwrap(CGPDFDocument(CGDataProvider(data: data as CFData)!))
+        let doc = try XCTUnwrap(CGPDFDocument(try XCTUnwrap(CGDataProvider(data: data as CFData))))
         XCTAssertEqual(doc.numberOfPages, 2)
         let first = try XCTUnwrap(doc.page(at: 1)).getBoxRect(.mediaBox)
         XCTAssertEqual(first.width, 612, accuracy: 0.5) // Letter width for the default page

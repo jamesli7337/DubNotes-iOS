@@ -10,7 +10,7 @@ final class ShapeRecognitionTests: XCTestCase {
         let pts = (0...30).map { Pt(Double($0) * 10, 100 + Double($0) * 0.5) }
         let fit = try XCTUnwrap(recognize(pts))
         XCTAssertEqual(fit.shape, .line)
-        XCTAssertEqual(fit.w, Geometry.dist(pts[0], pts[30]), accuracy: 0.5)
+        XCTAssertEqual(fit.w, Geometry.dist(try item(pts, 0), try item(pts, 30)), accuracy: 0.5)
     }
 
     func testLineEndpointsRoundTripThroughTheFit() throws {

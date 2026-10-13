@@ -8,11 +8,11 @@ final class NotebookDocumentTests: XCTestCase {
 
     // MARK: Trailing blank page
 
-    func testTrailingBlankIsAddedWhenTheLastPageHasContent() {
+    func testTrailingBlankIsAddedWhenTheLastPageHasContent() throws {
         let doc = Make.document(pages: 2, fillLast: true)
         XCTAssertTrue(doc.enforceTrailingBlank())
         XCTAssertEqual(doc.pages.count, 3)
-        XCTAssertTrue(doc.isBlank(doc.pages[2].id))
+        XCTAssertTrue(doc.isBlank(try item(doc.pages, 2).id))
     }
 
     func testTrailingBlankIsNotDuplicated() {
@@ -28,11 +28,11 @@ final class NotebookDocumentTests: XCTestCase {
         XCTAssertEqual(doc.pages.count, 3)
     }
 
-    func testAnEmptyNotebookGetsAPage() {
+    func testAnEmptyNotebookGetsAPage() throws {
         let doc = NotebookDocument(notebook: Make.notebook(), pages: [])
         XCTAssertTrue(doc.enforceTrailingBlank())
         XCTAssertEqual(doc.pages.count, 1)
-        XCTAssertEqual(doc.pages[0].index, 0)
+        XCTAssertEqual(try item(doc.pages, 0).index, 0)
     }
 
     func testABackgroundMakesAPageNonBlank() {
@@ -116,8 +116,8 @@ final class NotebookDocumentTests: XCTestCase {
         let originalIds = Set(doc.items(of: "p0").map(\.id))
         XCTAssertTrue(items.allSatisfy { !originalIds.contains($0.id) && $0.pageId == copy.id })
         // z-order survives: the stroke stays under the text box
-        XCTAssertTrue(items[0].isStroke)
-        XCTAssertLessThan(items[0].createdAt, items[1].createdAt)
+        XCTAssertTrue(try item(items, 0).isStroke)
+        XCTAssertLessThan(try item(items, 0).createdAt, try item(items, 1).createdAt)
     }
 
     // MARK: Paper
@@ -141,12 +141,12 @@ final class NotebookDocumentTests: XCTestCase {
         XCTAssertEqual(doc.items(of: "p1").map(\.id), ["s1", "t1", "s2"])
     }
 
-    func testReplaceKeepsTheSlotAndIgnoresUnknownIds() {
+    func testReplaceKeepsTheSlotAndIgnoresUnknownIds() throws {
         let doc = NotebookDocument(notebook: Make.notebook(), pages: [Make.page("p1")])
         doc.addElement(Make.text("t1", x: 0))
         doc.replaceItems(on: "p1", with: [.element(Make.text("t1", x: 99)), .element(Make.text("zzz"))])
         XCTAssertEqual(doc.elements(of: "p1").count, 1)
-        XCTAssertEqual(doc.elements(of: "p1")[0].x, 99)
+        XCTAssertEqual(try item(doc.elements(of: "p1"), 0).x, 99)
     }
 
     func testRemoveReturnsWhatWasRemoved() {
@@ -191,9 +191,9 @@ final class NotebookDocumentTests: XCTestCase {
         XCTAssertEqual(doc.notebook.name, "Renamed") // blank names are ignored
     }
 
-    func testDeletedThenReinsertedPageIsNotDeleted() {
+    func testDeletedThenReinsertedPageIsNotDeleted() throws {
         let doc = Make.document(pages: 2)
-        let page = doc.page("p0")!
+        let page = try XCTUnwrap(doc.page("p0"))
         doc.deletePage("p0")
         XCTAssertTrue(doc.deletedPages.contains("p0"))
         doc.insertPage(page, at: 0)

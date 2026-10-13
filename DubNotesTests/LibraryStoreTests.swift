@@ -56,14 +56,14 @@ final class LibraryStoreTests: ScratchTestCase {
         let nb = s.createNotebook(name: "Work", folderId: nil, paper: .default, kind: .pages)
         s.flushNow()
         let doc = try XCTUnwrap(s.openDocument(nb.id))
-        let pageId = doc.pages[0].id
+        let pageId = try item(doc.pages, 0).id
         doc.addStroke(Make.stroke("s1", page: pageId, nb: nb.id))
         doc.enforceTrailingBlank()
         doc.rename("Work, renamed")
         s.closeDocument(nb.id)
 
         XCTAssertEqual(s.notebook(nb.id)?.name, "Work, renamed")
-        XCTAssertEqual(s.sizeLabel(for: s.notebook(nb.id)!), "1 page") // the trailing blank page is not counted
+        XCTAssertEqual(s.sizeLabel(for: try XCTUnwrap(s.notebook(nb.id))), "1 page") // the trailing blank page is not counted
 
         let again = makeStore()
         let reopened = try XCTUnwrap(again.openDocument(nb.id))
@@ -123,16 +123,16 @@ final class LibraryStoreTests: ScratchTestCase {
         XCTAssertNil(again.folder(inner.id))
     }
 
-    func testDividerAboveANotebook() {
+    func testDividerAboveANotebook() throws {
         let s = makeStore()
         let a = s.createNotebook(name: "A", folderId: nil, paper: .default, kind: .pages)
         let b = s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .pages)
         s.createDivider(folderId: nil, label: "Section", aboveNotebookId: a.id)
         let items = s.folderItems(nil)
         XCTAssertEqual(items.count, 3)
-        XCTAssertEqual(items[0].id, b.id)
-        if case .divider(let d) = items[1] { XCTAssertEqual(d.label, "Section") } else { XCTFail("divider should sit above A") }
-        XCTAssertEqual(items[2].id, a.id)
+        XCTAssertEqual(try item(items, 0).id, b.id)
+        if case .divider(let d)? = items.dropFirst().first { XCTAssertEqual(d.label, "Section") } else { XCTFail("divider should sit above A") }
+        XCTAssertEqual(try item(items, 2).id, a.id)
     }
 
     func testRecentIsByLastEdit() {
@@ -180,15 +180,15 @@ final class LibraryStoreTests: ScratchTestCase {
         let physics = try XCTUnwrap(s.notebooks.first { $0.name == "Physics" })
         let doc = try XCTUnwrap(relaunch(s).openDocument(physics.id))
         XCTAssertEqual(doc.pages.count, 3)
-        XCTAssertEqual(doc.strokes(of: doc.pages[0].id).count, 2)
-        XCTAssertEqual(doc.elements(of: doc.pages[0].id).count, 4)
-        if case .pdf(let assetId, let n)? = doc.pages[2].background {
+        XCTAssertEqual(doc.strokes(of: try item(doc.pages, 0).id).count, 2)
+        XCTAssertEqual(doc.elements(of: try item(doc.pages, 0).id).count, 4)
+        if case .pdf(let assetId, let n)? = doc.pages.dropFirst(2).first?.background {
             XCTAssertEqual(n, 2)
             XCTAssertNotNil(s.files.readAsset(notebookId: physics.id, assetId: assetId), "the PDF came with it, under the new ids")
         } else {
             XCTFail("page 3 should still point at its PDF")
         }
-        XCTAssertEqual(doc.pages[2].pageWidth, 612)
+        XCTAssertEqual(try item(doc.pages, 2).pageWidth, 612)
     }
 
     func testRestoredRootItemsGoAfterWhatIsAlreadyThere() throws {

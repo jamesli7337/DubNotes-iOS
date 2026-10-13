@@ -61,7 +61,7 @@ final class BackupImporterTests: ScratchTestCase {
     func testAPdfBackgroundPointsAtTheCopiedAsset() throws {
         let (original, copy, _) = try copies()
         let asset = try XCTUnwrap(copy.assets.first)
-        XCTAssertNotEqual(asset.id, original.assets[0].id)
+        XCTAssertNotEqual(asset.id, try item(original.assets, 0).id)
         let physics = try XCTUnwrap(copy.notebooks.first { $0.name == "Physics" })
         XCTAssertEqual(asset.notebookId, physics.id)
         let pdfPage = try XCTUnwrap(copy.pages.first { if case .pdf? = $0.background { return true } else { return false } })
@@ -131,7 +131,7 @@ final class BackupImporterTests: ScratchTestCase {
         page.background = .pdf(assetId: "gone", page: 1)
         b.pages = [page]
         let r = BackupImporter.makeCopies(of: b)
-        XCTAssertNil(r.backup.pages[0].background)
+        XCTAssertNil(try item(r.backup.pages, 0).background)
         XCTAssertEqual(r.warnings.count, 1)
     }
 

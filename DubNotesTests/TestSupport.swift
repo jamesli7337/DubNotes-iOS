@@ -89,3 +89,15 @@ class ScratchTestCase: XCTestCase {
         return try Data(contentsOf: url)
     }
 }
+
+struct IndexOutOfRange: Error, CustomStringConvertible {
+    let index: Int
+    let count: Int
+    var description: String { "index \(index) is out of range for \(count) element(s)" }
+}
+
+/// `a[i]` that fails the one test instead of trapping the whole run.
+func item<T>(_ a: [T], _ i: Int) throws -> T {
+    guard a.indices.contains(i) else { throw IndexOutOfRange(index: i, count: a.count) }
+    return a[i]
+}

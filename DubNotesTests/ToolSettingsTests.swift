@@ -67,11 +67,11 @@ final class ToolSettingsTests: XCTestCase {
         XCTAssertEqual(s.penSwatches, reversed)
     }
 
-    func testToolOrderMovesOnlyTheNamedTools() {
+    func testToolOrderMovesOnlyTheNamedTools() throws {
         var s = ToolSettings()
         s.setToolOrder([.hand, .pen]) // swap the first and last of the two named
         XCTAssertEqual(s.toolOrder.first, .hand)
-        XCTAssertEqual(s.toolOrder[1], .highlighter) // untouched slots stay put
+        XCTAssertEqual(try item(s.toolOrder, 1), .highlighter) // untouched slots stay put
         XCTAssertEqual(s.toolOrder.last, .pen)
         XCTAssertEqual(Set(s.toolOrder), Set(ToolKind.allCases))
     }

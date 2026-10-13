@@ -35,6 +35,7 @@ enum StrokeConverter {
             points.append(PKStrokePoint(location: CGPoint(x: only.location.x + 0.1, y: only.location.y + 0.1), timeOffset: 0.005,
                                         size: only.size, opacity: 1, force: only.force, azimuth: 0, altitude: .pi / 2))
         }
+        print("[ink-debug] pkStroke: model points=\(s.points.count) controlPoints=\(points.count) -> path.count=\(PKStrokePath(controlPoints: points, creationDate: start).count)")
         return PKStroke(ink: ink, path: PKStrokePath(controlPoints: points, creationDate: start))
     }
 
@@ -46,9 +47,11 @@ enum StrokeConverter {
     /// untransformed path's length and end points. Colour is left out on purpose: PencilKit may re-encode it
     /// slightly, and a recolour goes through the model, not the canvas.
     static func signature(_ pk: PKStroke) -> String {
-        let n = pk.path.count
-        guard n > 0 else { return "empty" }
-        let a = pk.path[0].location, b = pk.path[n - 1].location
+        // iterate rather than subscript: do not assume how PKStrokePath numbers its elements
+        let pts = Array(pk.path)
+        let n = pts.count
+        guard let first = pts.first, let last = pts.last else { return "empty" }
+        let a = first.location, b = last.location
         func r(_ v: CGFloat) -> String { String(format: "%.2f", Double(v)) }
         return "\(pk.ink.inkType)|\(n)|\(r(a.x)),\(r(a.y))|\(r(b.x)),\(r(b.y))"
     }
@@ -80,6 +83,13 @@ enum StrokeConverter {
     /// strokes PencilKit created itself are converted using `nib`, the current tool's size.
     static func reconcile(_ drawing: PKDrawing, baseline: [Stroke], pageId: String, notebookId: String,
                           paper: Paper, tool: Stroke.Tool, nib: Double, now: Double) -> Reconciled {
+        // TEMPORARY DIAGNOSTICS (remove once the CI log shows the real PencilKit values)
+        print("[ink-debug] reconcile: canvas strokes=\(drawing.strokes.count) baseline=\(baseline.count)")
+        for (i, pk) in drawing.strokes.enumerated() {
+            let p = pk.path
+            print("[ink-debug]  stroke \(i): path.count=\(p.count) startIndex=\(p.startIndex) endIndex=\(p.endIndex) arrayCount=\(Array(p).count) sig=\(signature(pk)) identity=\(pk.transform.isIdentity) masks=\(pk.maskedPathRanges.count)")
+        }
+        for s in baseline { print("[ink-debug]  baseline \(s.id): points=\(s.points.count) sig=\(signature(of: s, paper: paper))") }
         var bySignature: [String: [Stroke]] = [:]
         for s in baseline { bySignature[signature(of: s, paper: paper), default: []].append(s) }
         var used = Set<String>()
@@ -114,6 +124,7 @@ enum StrokeConverter {
                 stamp += 1
             }
         }
+        print("[ink-debug] reconciled: strokes=\(model.count) baseline=\(nextBaseline.count) pointCounts=\(model.map { $0.points.count })")
         return Reconciled(strokes: model, baseline: nextBaseline)
     }
 
@@ -149,8 +160,7 @@ enum StrokeConverter {
         let k = scale > 0 ? scale : 1
         let nominal = max(nib * k, 0.1)
         var pts: [StrokePoint] = []
-        for i in 0..<pk.path.count {
-            let p = pk.path[i]
+        for p in Array(pk.path) {
             let loc = p.location.applying(pk.transform)
             let pressureValue = tool == .pen ? pressure(widthFactor: Double(p.size.width) * k / nominal) : 0.5
             pts.append(StrokePoint(x: Double(loc.x), y: Double(loc.y), pressure: pressureValue))

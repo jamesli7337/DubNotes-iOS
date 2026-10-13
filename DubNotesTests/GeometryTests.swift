@@ -77,9 +77,9 @@ final class GeometryTests: XCTestCase {
         XCTAssertNil(Geometry.itemsFrame([]))
     }
 
-    func testTransformIdentityChangesNothing() {
+    func testTransformIdentityChangesNothing() throws {
         let items: [PageItem] = [.stroke(Make.stroke("a", points: [(0, 0), (10, 10)])), .element(Make.text("t"))]
-        let frame = Geometry.itemsFrame(items)!
+        let frame = try XCTUnwrap(Geometry.itemsFrame(items))
         XCTAssertEqual(Geometry.transformItems(items, from: frame, to: frame), items)
     }
 
@@ -88,10 +88,10 @@ final class GeometryTests: XCTestCase {
         let from = ItemFrame(x: 0, y: 0, w: 10, h: 10)
         let to = ItemFrame(x: 100, y: 100, w: 20, h: 20)
         guard case .stroke(let out)? = Geometry.transformItems([.stroke(s)], from: from, to: to).first else { return XCTFail() }
-        XCTAssertEqual(out.points[0].x, 100, accuracy: 1e-9)
-        XCTAssertEqual(out.points[1].x, 120, accuracy: 1e-9)
+        XCTAssertEqual(try item(out.points, 0).x, 100, accuracy: 1e-9)
+        XCTAssertEqual(try item(out.points, 1).x, 120, accuracy: 1e-9)
         XCTAssertEqual(out.size, 8, accuracy: 1e-9)
-        XCTAssertEqual(out.points[0].pressure, 0.5)
+        XCTAssertEqual(try item(out.points, 0).pressure, 0.5)
     }
 
     func testTransformRotatesElementsAndScalesText() throws {
@@ -105,11 +105,11 @@ final class GeometryTests: XCTestCase {
         XCTAssertEqual(tt.fontSize, 40, accuracy: 1e-9)
     }
 
-    func testTranslateMovesEverything() {
+    func testTranslateMovesEverything() throws {
         let moved = Geometry.translateItems([.stroke(Make.stroke("a", points: [(1, 1), (2, 2)])), .element(Make.tape("t"))], dx: 5, dy: -1)
-        guard case .stroke(let s) = moved[0], case .element(let e) = moved[1] else { return XCTFail() }
-        XCTAssertEqual(s.points[0].x, 6)
-        XCTAssertEqual(s.points[0].y, 0)
+        guard moved.count == 2, case .stroke(let s) = moved[0], case .element(let e) = moved[1] else { return XCTFail("expected a stroke and an element") }
+        XCTAssertEqual(try item(s.points, 0).x, 6)
+        XCTAssertEqual(try item(s.points, 0).y, 0)
         XCTAssertEqual(e.x, 5)
     }
 
@@ -125,11 +125,11 @@ final class GeometryTests: XCTestCase {
     func testRubOutMarksPointsInsideTheCircle() throws {
         let pts = (0...10).map { StrokePoint(x: Double($0) * 10, y: 0, pressure: 0.5) }
         let r = try XCTUnwrap(Geometry.rubOut(pts, gone: [], cx: 50, cy: 0, r: 12))
-        XCTAssertTrue(r.gone.contains(where: { r.pts[$0].x == 50 }))
+        XCTAssertTrue(r.gone.contains(where: { r.pts.indices.contains($0) && r.pts[$0].x == 50 }))
         let segs = Geometry.survivingSegments(r.pts, gone: r.gone)
         XCTAssertEqual(segs.count, 2)
-        XCTAssertLessThan(segs[0].last!.x, 50)
-        XCTAssertGreaterThan(segs[1].first!.x, 50)
+        XCTAssertLessThan(try XCTUnwrap(try item(segs, 0).last).x, 50)
+        XCTAssertGreaterThan(try XCTUnwrap(try item(segs, 1).first).x, 50)
     }
 
     func testRubOutMissingEverythingReturnsNil() {
