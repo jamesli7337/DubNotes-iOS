@@ -390,7 +390,7 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         session.remove(ids: ids, from: pageId)
     }
 
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         if gestureRecognizer === eraseGR { return settings.kind == .eraser && mounted }
         return true
     }
