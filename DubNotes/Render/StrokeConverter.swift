@@ -22,17 +22,18 @@ enum StrokeConverter {
 
     static func pkStroke(_ s: Stroke, paper: Paper) -> PKStroke {
         let ink = PKInk(inkType(s.tool), color: color(for: s, paper: paper))
-        let start = Date(timeIntervalSinceReferenceDate: s.createdAt / 1000)
+        // createdAt is milliseconds since 1970 (it was read as since 2001, putting strokes decades off)
+        let start = Date(timeIntervalSince1970: s.createdAt / 1000)
         var points: [PKStrokePoint] = []
         for (i, p) in s.points.enumerated() {
             let w = CGFloat(s.size * (s.tool == .pen ? widthFactor(pressure: p.pressure) : 1))
-            points.append(PKStrokePoint(location: CGPoint(x: p.x, y: p.y), timeOffset: TimeInterval(i) * 0.005,
+            points.append(PKStrokePoint(location: CGPoint(x: p.x, y: p.y), timeOffset: TimeInterval(i) * 0.01,
                                         size: CGSize(width: w, height: w), opacity: 1,
                                         force: CGFloat(p.pressure), azimuth: 0, altitude: .pi / 2))
         }
         if points.count == 1, let only = points.first {
             // a lone sample needs a second point to be a drawable stroke
-            points.append(PKStrokePoint(location: CGPoint(x: only.location.x + 0.1, y: only.location.y + 0.1), timeOffset: 0.005,
+            points.append(PKStrokePoint(location: CGPoint(x: only.location.x + 0.1, y: only.location.y + 0.1), timeOffset: 0.01,
                                         size: only.size, opacity: 1, force: only.force, azimuth: 0, altitude: .pi / 2))
         }
         print("[ink-debug] pkStroke: model points=\(s.points.count) controlPoints=\(points.count) -> path.count=\(PKStrokePath(controlPoints: points, creationDate: start).count)")

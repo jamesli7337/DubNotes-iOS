@@ -53,6 +53,15 @@ jobs:
           else
             echo "No result bundle at build/test.xcresult"
           fi
+          echo "=== Slowest tests ==="
+          if [ -d build/test.xcresult ]; then
+            xcrun xcresulttool get test-results tests --path build/test.xcresult > build/tests.json 2>/dev/null || true
+            jq -r '.. | objects | select(.nodeType? == "Test Case") | "\((.durationInSeconds // .duration // 0)) \(.result // "?") \(.name)"' build/tests.json 2>/dev/null | sort -rn | head -n 25 || true
+            echo "--- total of listed test durations (seconds):"
+            jq -r '[.. | objects | select(.nodeType? == "Test Case") | (.durationInSeconds // .duration // 0)] | add' build/tests.json 2>/dev/null || true
+          fi
+          echo "=== Ink diagnostics from the test log ==="
+          echo "(see the Test step output: lines starting [ink-diag] and [ink-debug])"
           echo "=== Crash logs ==="
           ls -la ~/Library/Logs/DiagnosticReports 2>/dev/null || echo "none"
           for f in ~/Library/Logs/DiagnosticReports/*; do
