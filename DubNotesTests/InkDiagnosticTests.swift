@@ -26,6 +26,12 @@ final class InkDiagnosticTests: XCTestCase {
             parts.append("last=" + String(describing: pts.last?.location))
             parts.append("transform=" + String(describing: pk.transform))
             parts.append("masks=" + String(pk.maskedPathRanges.count))
+            var rangeTexts: [String] = []
+            for range in pk.maskedPathRanges {
+                rangeTexts.append(String(describing: range.lowerBound) + "..." + String(describing: range.upperBound))
+            }
+            parts.append("mask ranges=[" + rangeTexts.joined(separator: "; ") + "] pathCount=" + String(pts.count) + " maskIsNil=" + String(pk.mask == nil))
+            parts.append("erasedRanges(rule)=" + String(StrokeConverter.erasedRanges(pk).count))
             parts.append("renderBounds=" + String(describing: pk.renderBounds))
             log(parts.joined(separator: " "))
         }
@@ -106,6 +112,14 @@ final class InkDiagnosticTests: XCTestCase {
                                           pageId: "p1", notebookId: "nb1", paper: paper, tool: .pen, nib: 4, now: 5000)
         let ids: [String] = r.strokes.map { $0.id }
         log("reconcile round trip: strokes=" + String(r.strokes.count) + " baseline=" + String(r.baseline.count) + " ids=" + ids.joined(separator: ","))
+
+        // 4. a real erase made from code: the same pen stroke with an erase shape over its middle
+        let erasePath = UIBezierPath(rect: CGRect(x: 25, y: 0, width: 10, height: 40))
+        let erasedStroke = PKStroke(ink: ink, path: PKStrokePath(controlPoints: points(raw, dt: 0.01, size: 4, altitude: halfPi), creationDate: nowDate),
+                                    transform: .identity, mask: erasePath)
+        describe("stroke built with an erase mask (x 25...35)", PKDrawing(strokes: [erasedStroke]))
+        let erased: [ClosedRange<CGFloat>] = StrokeConverter.erasedRanges(erasedStroke)
+        log("erasedRanges for the masked stroke: " + String(erased.count))
     }
 }
 

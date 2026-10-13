@@ -115,14 +115,14 @@ enum StrokeConverter {
 
         for pk in drawing.strokes {
             let sig = signature(pk)
-            let unchanged = pk.transform.isIdentity && pk.maskedPathRanges.isEmpty
+            let unchanged = pk.transform.isIdentity && erasedRanges(pk).isEmpty
             if let original = bySignature[sig]?.first(where: { !used.contains($0.id) }) {
                 used.insert(original.id)
                 nextBaseline.append(original)
                 if unchanged {
                     model.append(original)
                 } else {
-                    model += derived(from: original, transform: pk.transform, masked: pk.maskedPathRanges, createdAt: original.createdAt)
+                    model += derived(from: original, transform: pk.transform, masked: erasedRanges(pk), createdAt: original.createdAt)
                 }
             } else if let original = bySignature[sig]?.first {
                 // a duplicate of a stroke already matched (a copy made inside PencilKit)
@@ -130,7 +130,7 @@ enum StrokeConverter {
                 twin.id = UUID().uuidString
                 twin.createdAt = stamp
                 nextBaseline.append(twin)
-                model += derived(from: twin, transform: pk.transform, masked: pk.maskedPathRanges, createdAt: stamp,
+                model += derived(from: twin, transform: pk.transform, masked: erasedRanges(pk), createdAt: stamp,
                                  keepId: unchanged)
                 stamp += 1
             } else {
@@ -142,6 +142,32 @@ enum StrokeConverter {
         }
         print("[ink-debug] reconciled: strokes=\(model.count) baseline=\(nextBaseline.count) pointCounts=\(model.map { $0.points.count })")
         return Reconciled(strokes: model, baseline: nextBaseline)
+    }
+
+    /// The parts of a stroke's path that were really erased.
+    ///
+    /// Rule: PencilKit reports `maskedPathRanges` even for strokes nobody has erased (run #17: every stroke built from
+    /// our own points, untouched, reported exactly one range), so the list can't be trusted as it stands. A range
+    /// counts only if, after clamping to the path's own parameter span 0...(count - 1), it still has positive length
+    /// (zero-length and out-of-range ranges are dropped). If what is left covers the whole path and the stroke has no
+    /// `mask` shape, it is treated as the default mask rather than an erase, because a stroke the user really erased
+    /// carries the erase shape in `mask`. Evidence: the `[ink-diag]` "mask" lines in InkDiagnosticTests print the
+    /// ranges, the path count and whether `mask` is nil for an untouched stroke and for one erased from code.
+    static func erasedRanges(_ pk: PKStroke) -> [ClosedRange<CGFloat>] {
+        let count = Array(pk.path).count
+        guard count > 1 else { return [] }
+        let span: ClosedRange<CGFloat> = 0...CGFloat(count - 1)
+        var kept: [ClosedRange<CGFloat>] = []
+        for r in pk.maskedPathRanges {
+            let lo: CGFloat = max(r.lowerBound, span.lowerBound)
+            let hi: CGFloat = min(r.upperBound, span.upperBound)
+            if hi - lo > 0.0001 { kept.append(lo...hi) }
+        }
+        if kept.count == 1, let only = kept.first, only.lowerBound <= span.lowerBound + 0.0001,
+           only.upperBound >= span.upperBound - 0.0001, pk.mask == nil {
+            return []
+        }
+        return kept
     }
 
     /// A moved / resized / partly erased version of a known stroke, always under fresh ids.
