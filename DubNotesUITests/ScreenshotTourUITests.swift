@@ -28,7 +28,7 @@ final class ScreenshotTourUITests: XCTestCase {
         attachment.name = label
         attachment.lifetime = .keepAlways
         add(attachment)
-        print("[tour] " + label)
+        print("[tour] screenshot: " + label)
     }
 
     /// Taps the first element that appears within a few seconds; false if none does.
@@ -47,6 +47,7 @@ final class ScreenshotTourUITests: XCTestCase {
 
     /// Runs one step: the action returns whether it found its control. The screenshot is taken either way.
     private func step(_ name: String, _ action: () -> Bool) {
+        print("[tour] step: " + name)
         let found = action()
         usleep(600_000) // let animations settle
         if found {
@@ -74,10 +75,27 @@ final class ScreenshotTourUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = ["-ui-tour"]
         if let b64 = fixtureBase64() { app.launchEnvironment["UI_TOUR_BACKUP_BASE64"] = b64 }
-        XCUIDevice.shared.orientation = .landscapeLeft
         app.launch()
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30), "the app did not launch")
-        usleep(1_500_000)
+
+        // Hard gate: no screenshots of a home screen. If the app is not up and showing the library, fail here.
+        let foreground: Bool = app.state == .runningForeground
+        let newButton: XCUIElement = app.buttons["New"].firstMatch
+        let libraryUp: Bool = foreground && newButton.waitForExistence(timeout: 20)
+        if !libraryUp {
+            let state: String = String(describing: app.state)
+            print("[tour] FATAL: app not ready. state=" + state + " foreground=" + String(foreground))
+            let tree = XCTAttachment(string: app.debugDescription)
+            tree.name = "app-debugDescription"
+            tree.lifetime = .keepAlways
+            add(tree)
+            let picture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            picture.name = "00-app-not-ready"
+            picture.lifetime = .keepAlways
+            add(picture)
+            XCTFail("The app is not in the foreground showing the library (state " + state + ")")
+            return
+        }
+        print("[tour] app is up; library visible")
 
         // Library
         shot("library-grid")

@@ -55,10 +55,15 @@ jobs:
             -destination "platform=iOS Simulator,id=$UDID" \
             -derivedDataPath build \
             -resultBundlePath build/tour.xcresult \
-            CODE_SIGNING_ALLOWED=NO || echo "tour test run failed (screenshots are still exported below)"
+            CODE_SIGNING_ALLOWED=NO
+      - name: Export tour screenshots
+        if: always()
+        run: |
           mkdir -p build/tour
           if [ -d build/tour.xcresult ]; then
             xcrun xcresulttool export attachments --path build/tour.xcresult --output-path build/tour || echo "xcresulttool export attachments failed"
+          else
+            echo "No result bundle at build/tour.xcresult"
           fi
           ls -la build/tour | head -n 80
       - name: Upload tour screenshots
@@ -67,7 +72,7 @@ jobs:
         with:
           name: tour
           path: build/tour/
-          retention-days: 3
+          retention-days: 14
           if-no-files-found: warn
       - name: Test diagnostics
         if: always()
@@ -91,6 +96,15 @@ jobs:
           fi
           echo "=== Ink diagnostics from the test log ==="
           echo "(see the Test step output: lines starting [ink-diag] and [ink-debug])"
+          echo "=== DubNotes crash logs (tour run) ==="
+          found=0
+          for f in ~/Library/Logs/DiagnosticReports/DubNotes*; do
+            [ -f "$f" ] || continue
+            found=1
+            echo "----- $f"
+            head -n 120 "$f"
+          done
+          [ "$found" = 1 ] || echo "no crash log starting with DubNotes"
           echo "=== Crash logs ==="
           ls -la ~/Library/Logs/DiagnosticReports 2>/dev/null || echo "none"
           for f in ~/Library/Logs/DiagnosticReports/*; do
