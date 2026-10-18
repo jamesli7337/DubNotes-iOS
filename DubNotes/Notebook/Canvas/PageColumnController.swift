@@ -33,6 +33,7 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
     private var didInitialZoom = false
     private var keyboardHeight: CGFloat = 0
     private var lastToolSignature = ""
+    private let aiOutline = AIModeOutlineView()
 
     var topInset: CGFloat = 0 { didSet { if topInset != oldValue { applyInsets() } } }
     var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { applyInsets() } } }
@@ -79,6 +80,7 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
         for p in pages where slots[p.id] == nil {
             let v = PageView(pageId: p.id, session: session)
             v.column = self
+            v.isUserInteractionEnabled = !session.aiMode
             let l = UILabel()
             l.font = UIFont.systemFont(ofSize: 13, weight: .medium)
             l.textColor = .secondaryLabel
@@ -133,6 +135,7 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
         }
         contentSize = CGSize(width: contentW, height: y)
         applyContentSize()
+        updateAIOutline()
     }
 
     private var contentSize = CGSize.zero
@@ -216,6 +219,7 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
                 if !v.mounted {
                     v.mount()
                     v.updateScale()
+                    if session.aiMode { fadeForAIMode(v) }
                 }
             } else if v.mounted {
                 v.unmount()
@@ -232,7 +236,45 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
             let d = v.frame.minY <= midY && midY <= v.frame.maxY ? 0 : min(abs(v.frame.minY - midY), abs(v.frame.maxY - midY))
             if d < bestD { bestD = d; best = id }
         }
-        if let b = best, session.currentPageId != b { session.currentPageId = b }
+        if let b = best, session.currentPageId != b {
+            session.currentPageId = b
+            updateAIOutline()
+        }
+    }
+
+    // MARK: AI mode
+
+    /// Page content fades under the outline; paper colour stays (it is the page view's own background).
+    private static let aiFadeAlpha: CGFloat = 0.25
+
+    private func fadeForAIMode(_ v: PageView) {
+        let alpha: CGFloat = session.aiMode ? Self.aiFadeAlpha : 1
+        for sub in v.subviews { sub.alpha = alpha }
+    }
+
+    /// Called after `session.aiMode` flips: stops (or restores) page input, fades the content, shows the outline.
+    func aiModeChanged() {
+        let on = session.aiMode
+        for slot in slots.values {
+            slot.view.isUserInteractionEnabled = !on
+            fadeForAIMode(slot.view)
+        }
+        if on {
+            content.addSubview(aiOutline)
+        } else {
+            aiOutline.removeFromSuperview()
+        }
+        updateAIOutline()
+    }
+
+    private func updateAIOutline() {
+        guard session.aiMode, let id = session.currentPage?.id, let v = slots[id]?.view else {
+            aiOutline.isHidden = true
+            return
+        }
+        aiOutline.isHidden = false
+        aiOutline.place(around: v.frame, labelRowHeight: Self.labelHeight)
+        content.bringSubviewToFront(aiOutline)
     }
 
     func scrollToPage(_ id: String) {
@@ -267,7 +309,10 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
     }
 
     func syncGuides() {
-        for slot in slots.values { slot.view.syncGuide() }
+        for slot in slots.values {
+            slot.view.syncGuide()
+            if session.aiMode { fadeForAIMode(slot.view) }
+        }
     }
 
     // MARK: Selection and callout

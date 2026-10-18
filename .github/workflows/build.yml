@@ -41,7 +41,7 @@ jobs:
             -resultBundlePath build/test.xcresult \
             CODE_SIGNING_ALLOWED=NO
       - name: Screenshot tour
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         run: |
           UDID=$(xcrun simctl list devices available | grep -m1 iPad | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}')
           if [ -z "$UDID" ]; then
@@ -57,7 +57,7 @@ jobs:
             -resultBundlePath build/tour.xcresult \
             CODE_SIGNING_ALLOWED=NO
       - name: Export tour screenshots
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p build/tour
           if [ -d build/tour.xcresult ]; then
@@ -65,9 +65,11 @@ jobs:
           else
             echo "No result bundle at build/tour.xcresult"
           fi
+          # keep only images; drop screen recordings and other attachments
+          find build/tour -type f ! -iname '*.png' ! -iname '*.jpg' -delete
           ls -la build/tour | head -n 80
       - name: Upload tour screenshots
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: tour

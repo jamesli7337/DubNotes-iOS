@@ -40,6 +40,10 @@ final class NotebookSession {
     @ObservationIgnored let tools = ToolStore.shared
     @ObservationIgnored weak var column: PageColumnController?
 
+    /// AI mode: not saved, off whenever a notebook opens. While on, the page ignores input and nothing is written.
+    private(set) var aiMode = false
+    @ObservationIgnored let aiChats = AIChatStore()
+
     private(set) var history = UndoHistory()
     var currentPageId: String?
     var guideKind: GuideKind?
@@ -75,7 +79,19 @@ final class NotebookSession {
         settings = s
     }
 
+    /// Turning it on first commits any open edit and drops the selection, while the document may still be written.
+    func setAIMode(_ on: Bool) {
+        guard on != aiMode else { return }
+        if on {
+            column?.deactivateAll()
+            _ = column?.cancelPendingInput()
+        }
+        aiMode = on
+        column?.aiModeChanged()
+    }
+
     func close() {
+        aiMode = false
         column?.deactivateAll()
         library.closeDocument(doc.id)
         var s = tools.settings
@@ -150,6 +166,7 @@ final class NotebookSession {
     // MARK: Undo / redo
 
     func undo() {
+        guard !aiMode else { return }
         if column?.cancelPendingInput() == true { return }
         guard let op = history.popUndo() else { return }
         doc.revert(op)
@@ -158,7 +175,7 @@ final class NotebookSession {
     }
 
     func redo() {
-        guard let op = history.popRedo() else { return }
+        guard !aiMode, let op = history.popRedo() else { return }
         doc.apply(op)
         afterEdit(op.pageIds, structure: op.changesStructure)
         column?.clearSelectionIfStale()

@@ -83,6 +83,7 @@ struct DockView: View {
             if optionsOpen {
                 SwiftUI.Divider().padding(.horizontal, 10)
                 optionsRow
+                    .disabled(session.aiMode)
                     .frame(minHeight: 48)
                     .padding(.horizontal, 12)
                     .transition(.opacity)
@@ -105,10 +106,10 @@ struct DockView: View {
             guideButton(.protractor, symbol: "angle", label: "Protractor")
             separator
             Button { session.undo() } label: { iconLabel("arrow.uturn.backward") }
-                .disabled(!session.canUndo)
+                .disabled(!session.aiMode && !session.canUndo) // in AI mode it stays on but does nothing
                 .accessibilityLabel("Undo")
             Button { session.redo() } label: { iconLabel("arrow.uturn.forward") }
-                .disabled(!session.canRedo)
+                .disabled(!session.aiMode && !session.canRedo)
                 .accessibilityLabel("Redo")
         }
         .buttonStyle(.plain)
@@ -141,6 +142,7 @@ struct DockView: View {
                 optionsOpen = true
             }
         } label: { iconLabel(kind.symbol, active: settings.kind == kind) }
+        .disabled(session.aiMode && kind != .pen && kind != .eraser)
         .accessibilityLabel(kind.label)
         .accessibilityAddTraits(settings.kind == kind ? .isSelected : [])
         .draggable(kind.rawValue)
@@ -155,6 +157,7 @@ struct DockView: View {
 
     private func guideButton(_ kind: GuideKind, symbol: String, label: String) -> some View {
         Button { toggleGuide(kind) } label: { iconLabel(symbol, active: session.guideKind == kind) }
+            .disabled(session.aiMode)
             .accessibilityLabel(label)
     }
 

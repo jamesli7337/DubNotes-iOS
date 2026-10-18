@@ -129,6 +129,13 @@ final class ScreenshotTourUITests: XCTestCase {
             step("tool-" + tool.lowercased().replacingOccurrences(of: " ", with: "-")) { tap(button(tool)) }
         }
         step("tool-hand") { tap(buttonStarting("Hand")) }
+        step("ai-mode-on") { tap(button("AI mode")) }
+        step("ai-send") {
+            guard tap(button("Send to AI")) else { return false }
+            usleep(2_000_000) // the fake reply arrives after about a second
+            return true
+        }
+        step("ai-mode-off") { tap(button("AI mode")) }
         step("ruler") { tap(button("Ruler")) }
         _ = tap(button("Ruler")) // off again
         step("protractor") { tap(button("Protractor")) }

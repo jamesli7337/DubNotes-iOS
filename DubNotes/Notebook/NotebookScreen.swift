@@ -97,6 +97,7 @@ struct NotebookContent: View {
     @State private var busy: String?
     @State private var notice: Notice?
     @State private var split: SplitState?
+    @State private var aiPanelOpen = false
     @State private var topChromeHeight: CGFloat = 0
     @State private var bottomChromeHeight: CGFloat = 0
 
@@ -114,6 +115,10 @@ struct NotebookContent: View {
                     if let s = split, !s.floating, s.kind != .image { dockedPane(s, width: geo.size.width) }
                 }
                 chrome(width: geo.size.width)
+                if aiPanelOpen && session.aiMode {
+                    AIPanel(store: session.aiChats) { setAIPanel(open: false) }
+                        .transition(.move(edge: .leading))
+                }
                 if let s = split, s.floating || s.kind == .image { floatingPane(s, container: geo.size) }
                 if let busy {
                     ZStack {
@@ -247,6 +252,19 @@ struct NotebookContent: View {
 
     private var rightIsland: some View {
         HStack(spacing: 0) {
+            Button { toggleAIMode() } label: {
+                islandIcon("cpu")
+                    .foregroundStyle(session.aiMode ? Color.white : Color.primary)
+                    .background(session.aiMode ? AITheme.violet : Color.clear, in: Capsule())
+            }
+            .accessibilityLabel("AI mode")
+            .accessibilityAddTraits(session.aiMode ? .isSelected : [])
+            Button {
+                setAIPanel(open: true)
+                session.aiChats.sendStub()
+            } label: { islandIcon("paperplane").opacity(session.aiMode ? 1 : 0.35) }
+                .disabled(!session.aiMode)
+                .accessibilityLabel("Send to AI")
             Menu {
                 Button { sheet = .notebookPicker } label: { Label("Split screen page", systemImage: "book") }
                 Button { photoPurpose = .splitImage; photosOpen = true } label: { Label("Split screen image", systemImage: "photo") }
@@ -272,6 +290,16 @@ struct NotebookContent: View {
         .frame(height: 48)
         .background(.regularMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
+    }
+
+    private func toggleAIMode() {
+        let on = !session.aiMode
+        session.setAIMode(on)
+        setAIPanel(open: on)
+    }
+
+    private func setAIPanel(open: Bool) {
+        withAnimation(.easeOut(duration: 0.2)) { aiPanelOpen = open }
     }
 
     private func islandIcon(_ symbol: String) -> some View {
