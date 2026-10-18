@@ -64,6 +64,16 @@ final class ScreenshotTourUITests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
     }
 
+    /// If a sheet or picker is still open, taps Cancel first and says so in the log.
+    private func cancelIfSheetOpen(_ context: String) {
+        let cancel = app.buttons["Cancel"].firstMatch
+        if cancel.exists && cancel.isHittable {
+            print("[tour] a sheet or picker was open " + context + "; tapping Cancel")
+            cancel.tap()
+            usleep(500_000)
+        }
+    }
+
     private func dismissPopover() {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.6)).tap()
         usleep(400_000)
@@ -133,15 +143,22 @@ final class ScreenshotTourUITests: XCTestCase {
 
         step("split-menu") { tap(button("Split screen")) }
         step("split-pane-open") {
-            let opened = tap(button("Split screen page"))
-            if opened { _ = tap(app.staticTexts["Chemistry"].firstMatch, wait: 5) }
-            return opened
+            guard tap(button("Split screen page")) else { return false }
+            // the notebook picker is a sheet: pick Chemistry, then wait for the pane itself
+            let picked = tap(button("Chemistry"), app.staticTexts["Chemistry"].firstMatch, wait: 6)
+            let paneUp = picked && button("Close split screen").waitForExistence(timeout: 8)
+            usleep(1_500_000) // let the pane render its pages
+            return paneUp
         }
+        cancelIfSheetOpen("before closing the split pane")
         _ = tap(button("Close split screen"))
 
         // Back out, then the board
+        cancelIfSheetOpen("before going back to the library")
         step("back-to-library") { tap(button("Back to library")) }
-        step("board-notice") { tap(app.staticTexts["Mind map"].firstMatch) }
+        cancelIfSheetOpen("before opening the board")
+        step("board-notice") { tap(app.staticTexts["Mind map"].firstMatch, app.buttons["Mind map"].firstMatch) }
+        cancelIfSheetOpen("before leaving the board")
         step("board-back-to-library") { tap(button("Back to library")) }
 
         if !missing.isEmpty {

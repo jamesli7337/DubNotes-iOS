@@ -25,7 +25,7 @@ extension ToolKind {
         case .shapes: return "Shapes"
         case .tape: return "Tape"
         case .laser: return "Laser pointer"
-        case .hand: return "Hand — drag to pan with pen or mouse, like a finger"
+        case .hand: return "Hand — drag to pan with pen or finger"
         }
     }
 }
@@ -208,7 +208,7 @@ struct DockView: View {
         case .laser:
             hint("Point and drag: the trail fades and is never saved.")
         case .hand:
-            hint("Drag anywhere — with the pen, a finger, or the mouse — to pan the page.")
+            hint("Drag anywhere — with the pen or a finger — to pan the page.")
         }
     }
 

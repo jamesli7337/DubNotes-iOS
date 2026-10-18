@@ -6,7 +6,8 @@ import XCTest
 /// Diagnostic only: asserts nothing, prints how many strokes survive each way of building a PKDrawing, so the CI
 /// log shows exactly where strokes vanish. Search the log for "[ink-diag]".
 final class InkDiagnosticTests: XCTestCase {
-    private func log(_ s: String) { print("[ink-diag] \(s)") }
+    /// Diagnostic output is switched off; the test still builds each stroke and drawing and reads them back.
+    private func log(_ s: String) {}
 
     private func describe(_ label: String, _ d: PKDrawing) {
         let s: [PKStroke] = d.strokes

@@ -36,7 +36,6 @@ enum StrokeConverter {
             points.append(PKStrokePoint(location: CGPoint(x: only.location.x + 0.1, y: only.location.y + 0.1), timeOffset: 0.01,
                                         size: only.size, opacity: 1, force: only.force, azimuth: 0, altitude: .pi / 2))
         }
-        print("[ink-debug] pkStroke: model points=\(s.points.count) controlPoints=\(points.count) -> path.count=\(PKStrokePath(controlPoints: points, creationDate: start).count)")
         return PKStroke(ink: ink, path: PKStrokePath(controlPoints: points, creationDate: start))
     }
 
@@ -95,22 +94,6 @@ enum StrokeConverter {
     /// strokes PencilKit created itself are converted using `nib`, the current tool's size.
     static func reconcile(_ drawing: PKDrawing, baseline: [Stroke], pageId: String, notebookId: String,
                           paper: Paper, tool: Stroke.Tool, nib: Double, now: Double) -> Reconciled {
-        // TEMPORARY DIAGNOSTICS (remove once the CI log shows the real PencilKit values)
-        print("[ink-debug] reconcile: canvas strokes=\(drawing.strokes.count) baseline=\(baseline.count)")
-        for (i, pk) in drawing.strokes.enumerated() {
-            let p = pk.path
-            var parts: [String] = []
-            parts.append("[ink-debug]  stroke " + String(i))
-            parts.append("path.count=" + String(p.count))
-            parts.append("startIndex=" + String(p.startIndex))
-            parts.append("endIndex=" + String(p.endIndex))
-            parts.append("arrayCount=" + String(Array(p).count))
-            parts.append("sig=" + signature(pk))
-            parts.append("identity=" + String(pk.transform.isIdentity))
-            parts.append("masks=" + String(pk.maskedPathRanges.count))
-            print(parts.joined(separator: " "))
-        }
-        for s in baseline { print("[ink-debug]  baseline \(s.id): points=\(s.points.count) sig=\(signature(of: s, paper: paper))") }
         // Pairing is by identity, never by position. Two strokes can have identical geometry (the same word written
         // twice), so the signature alone cannot tell them apart. The creation timestamp can: it is written into each
         // stroke's PKStrokePath (`creationDate`, from the model's createdAt) and PencilKit keeps it through erase,
@@ -158,7 +141,6 @@ enum StrokeConverter {
                 stamp += 1
             }
         }
-        print("[ink-debug] reconciled: strokes=\(model.count) baseline=\(nextBaseline.count) pointCounts=\(model.map { $0.points.count })")
         return Reconciled(strokes: model, baseline: nextBaseline)
     }
 
