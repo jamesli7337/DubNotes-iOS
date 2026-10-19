@@ -43,6 +43,7 @@ final class NotebookSession {
     /// AI mode: not saved, off whenever a notebook opens. While on, the page ignores input and nothing is written.
     private(set) var aiMode = false
     @ObservationIgnored let aiChats = AIChatStore()
+    @ObservationIgnored let aiInk = AIInkStore()
     /// The tool to bring back when AI mode ends, set only if entering it had to switch to the pen.
     @ObservationIgnored private var toolBeforeAI: ToolKind?
 
@@ -79,6 +80,12 @@ final class NotebookSession {
         var s = tools.settings
         s.resetActiveColorsToPrimary()
         settings = s
+        aiChats.onReply = { [weak self] in self?.clearAIInk() }
+    }
+
+    /// A reply arrived: the ink that was sent is cleared, with its undo history.
+    private func clearAIInk() {
+        column?.aiInkChanged(pageIds: aiInk.clearAll())
     }
 
     /// Turning it on first commits any open edit and drops the selection, while the document may still be written.
@@ -111,6 +118,7 @@ final class NotebookSession {
     func close() {
         aiMode = false
         restoreToolAfterAI()
+        _ = aiInk.clearAll()
         column?.deactivateAll()
         library.closeDocument(doc.id)
         var s = tools.settings
@@ -185,7 +193,10 @@ final class NotebookSession {
     // MARK: Undo / redo
 
     func undo() {
-        guard !aiMode else { return }
+        if aiMode { // drives the AI ink only; the notebook's history is not touched
+            if let id = aiInk.undo() { column?.aiInkChanged(pageIds: [id]) }
+            return
+        }
         if column?.cancelPendingInput() == true { return }
         guard let op = history.popUndo() else { return }
         doc.revert(op)
@@ -194,7 +205,11 @@ final class NotebookSession {
     }
 
     func redo() {
-        guard !aiMode, let op = history.popRedo() else { return }
+        if aiMode {
+            if let id = aiInk.redo() { column?.aiInkChanged(pageIds: [id]) }
+            return
+        }
+        guard let op = history.popRedo() else { return }
         doc.apply(op)
         afterEdit(op.pageIds, structure: op.changesStructure)
         column?.clearSelectionIfStale()

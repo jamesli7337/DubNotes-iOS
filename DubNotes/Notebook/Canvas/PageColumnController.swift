@@ -34,6 +34,8 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
     private var keyboardHeight: CGFloat = 0
     private var lastToolSignature = ""
     private let aiOutline = AIModeOutlineView()
+    private var aiLayers: [String: AIInkLayer] = [:]
+    private var lastLayoutWidth: CGFloat = 0
 
     var topInset: CGFloat = 0 { didSet { if topInset != oldValue { applyInsets() } } }
     var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { applyInsets() } } }
@@ -135,6 +137,7 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
         }
         contentSize = CGSize(width: contentW, height: y)
         applyContentSize()
+        syncAIInk()
         updateAIOutline()
     }
 
@@ -158,6 +161,15 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
 
     func didLayout() {
         guard scrollView.bounds.width > 0 else { return }
+        let width = scrollView.bounds.width
+        defer { lastLayoutWidth = width }
+        if didInitialZoom, lastLayoutWidth > 0, abs(width - lastLayoutWidth) > 0.5 {
+            // the column got wider or narrower (the AI panel opening, a rotation): keep the same share of the page in view
+            let z = scrollView.zoomScale * width / lastLayoutWidth
+            scrollView.zoomScale = min(max(z, Self.zoomMin), Self.zoomMax)
+            applyContentSize()
+            applyInsets()
+        }
         if !didInitialZoom {
             didInitialZoom = true
             // open fitted to the width when the page is wider than the screen, 100% otherwise
@@ -225,6 +237,7 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
                 v.unmount()
             }
         }
+        syncAIInk()
     }
 
     private func updateCurrentPage() {
@@ -264,7 +277,41 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
         } else {
             aiOutline.removeFromSuperview()
         }
+        syncAIInk()
         updateAIOutline()
+        if on, AIInkLayer.seedEnabled, let id = session.currentPage?.id { aiLayers[id]?.seedTestStroke() }
+    }
+
+    /// Ink drawn in AI mode lives on its own canvas above each mounted page (in the column's content view, so it
+    /// scrolls and zooms with the pages). The canvases exist only while AI mode is on; the drawings stay in the store.
+    private func syncAIInk() {
+        guard session.aiMode || !aiLayers.isEmpty else { return }
+        var live = Set<String>()
+        if session.aiMode {
+            for id in order {
+                guard let v = slots[id]?.view, v.mounted else { continue }
+                live.insert(id)
+                let layer: AIInkLayer
+                if let existing = aiLayers[id] {
+                    layer = existing
+                } else {
+                    layer = AIInkLayer(pageId: id, session: session)
+                    aiLayers[id] = layer
+                    content.addSubview(layer.canvas)
+                    if aiOutline.superview === content { content.bringSubviewToFront(aiOutline) }
+                }
+                if layer.canvas.frame != v.frame { layer.canvas.frame = v.frame }
+            }
+        }
+        for (id, layer) in aiLayers where !live.contains(id) {
+            layer.canvas.removeFromSuperview()
+            aiLayers[id] = nil
+        }
+    }
+
+    /// The AI ink store changed these pages (undo, redo, or cleared after a send): reload their canvases.
+    func aiInkChanged(pageIds: [String]) {
+        for id in pageIds { aiLayers[id]?.reload() }
     }
 
     private func updateAIOutline() {
@@ -305,6 +352,7 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
         lastToolSignature = signature
         applyTouchPolicy()
         for slot in slots.values where slot.view.mounted { slot.view.toolChanged() }
+        for layer in aiLayers.values { layer.applyTool() }
         updateCallout()
     }
 

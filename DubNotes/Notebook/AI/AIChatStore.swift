@@ -31,6 +31,8 @@ final class AIChatStore {
     var activeChatId: String?
     /// The chat a reply is being waited for in, if any.
     private(set) var thinkingChatId: String?
+    /// Called after a send finishes, once the reply (if its chat still exists) has been added.
+    @ObservationIgnored var onReply: (() -> Void)?
 
     /// Newest first, for the picker.
     var chatsNewestFirst: [AIChat] { chats.sorted { $0.createdAt > $1.createdAt } }
@@ -78,8 +80,10 @@ final class AIChatStore {
 
     private func finishStub(chatId: String) {
         thinkingChatId = nil
-        guard let i = chats.firstIndex(where: { $0.id == chatId }) else { return } // deleted while waiting
-        chats[i].turns.append(AITurn(text: Self.placeholderReply, model: Self.stubModel, isError: false))
-        chats[i].updatedAt = Date()
+        if let i = chats.firstIndex(where: { $0.id == chatId }) { // else deleted while waiting
+            chats[i].turns.append(AITurn(text: Self.placeholderReply, model: Self.stubModel, isError: false))
+            chats[i].updatedAt = Date()
+        }
+        onReply?()
     }
 }

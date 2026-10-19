@@ -83,7 +83,7 @@ final class ScreenshotTourUITests: XCTestCase {
 
     func testScreenshotTour() throws {
         app = XCUIApplication()
-        app.launchArguments = ["-ui-tour"]
+        app.launchArguments = ["-ui-tour", "-seedAIInk"]
         if let b64 = fixtureBase64() { app.launchEnvironment["UI_TOUR_BACKUP_BASE64"] = b64 }
         app.launch()
 
@@ -130,6 +130,9 @@ final class ScreenshotTourUITests: XCTestCase {
         }
         step("tool-hand") { tap(buttonStarting("Hand")) }
         step("ai-mode-on") { tap(button("AI mode")) }
+        step("ai-ink") { true } // the seeded violet stroke, drawn on entering AI mode
+        step("ai-ink-undo") { tap(button("Undo")) }
+        step("ai-ink-redo") { tap(button("Redo")) }
         step("ai-send") {
             guard tap(button("Send to AI")) else { return false }
             usleep(2_000_000) // the fake reply arrives after about a second
