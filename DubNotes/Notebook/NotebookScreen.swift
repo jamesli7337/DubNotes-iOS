@@ -103,7 +103,18 @@ struct NotebookContent: View {
 
     private var settings: ToolSettings { session.settings }
 
+    /// With the AI panel open it takes its own width on the left and the notebook fills the rest.
     var body: some View {
+        HStack(spacing: 0) {
+            if aiPanelOpen && session.aiMode {
+                AIPanel(store: session.aiChats) { setAIPanel(open: false) }
+                    .transition(.move(edge: .leading))
+            }
+            notebookArea
+        }
+    }
+
+    private var notebookArea: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 Color(.systemGroupedBackground).ignoresSafeArea()
@@ -115,10 +126,6 @@ struct NotebookContent: View {
                     if let s = split, !s.floating, s.kind != .image { dockedPane(s, width: geo.size.width) }
                 }
                 chrome(width: geo.size.width)
-                if aiPanelOpen && session.aiMode {
-                    AIPanel(store: session.aiChats) { setAIPanel(open: false) }
-                        .transition(.move(edge: .leading))
-                }
                 if let s = split, s.floating || s.kind == .image { floatingPane(s, container: geo.size) }
                 if let busy {
                     ZStack {
@@ -241,6 +248,7 @@ struct NotebookContent: View {
             } label: {
                 Text(session.title).font(.headline).lineLimit(1).padding(.trailing, 12)
             }
+            .disabled(session.aiMode)
             .accessibilityLabel("Rename notebook")
         }
         .buttonStyle(.plain)
@@ -275,14 +283,17 @@ struct NotebookContent: View {
                 Button { importerPurpose = .pdfPages; importerOpen = true } label: { Label("Import PDF pages", systemImage: "square.and.arrow.down") }
                 Button { photoPurpose = .insert; photosOpen = true } label: { Label("Insert image", systemImage: "photo") }
             } label: { islandIcon("square.and.arrow.down") }
+                .disabled(session.aiMode)
                 .accessibilityLabel("Import")
             Menu { exportMenu } label: { islandIcon("square.and.arrow.up") }
                 .accessibilityLabel("Export")
             Button { sheet = .pages } label: { islandIcon("square.grid.2x2") }
+                .disabled(session.aiMode)
                 .accessibilityLabel("Manage pages")
             Button {
                 if let page = session.currentPage { sheet = .paper(page) }
             } label: { islandIcon("list.clipboard") }
+                .disabled(session.aiMode)
                 .accessibilityLabel("Customize paper")
         }
         .buttonStyle(.plain)

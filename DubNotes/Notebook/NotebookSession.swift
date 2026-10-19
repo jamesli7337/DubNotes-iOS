@@ -43,6 +43,8 @@ final class NotebookSession {
     /// AI mode: not saved, off whenever a notebook opens. While on, the page ignores input and nothing is written.
     private(set) var aiMode = false
     @ObservationIgnored let aiChats = AIChatStore()
+    /// The tool to bring back when AI mode ends, set only if entering it had to switch to the pen.
+    @ObservationIgnored private var toolBeforeAI: ToolKind?
 
     private(set) var history = UndoHistory()
     var currentPageId: String?
@@ -85,13 +87,30 @@ final class NotebookSession {
         if on {
             column?.deactivateAll()
             _ = column?.cancelPendingInput()
+            let kind = settings.kind
+            if kind != .pen && kind != .eraser {
+                toolBeforeAI = kind
+                var s = settings
+                s.kind = .pen
+                settings = s
+            }
         }
         aiMode = on
+        if !on { restoreToolAfterAI() }
         column?.aiModeChanged()
+    }
+
+    private func restoreToolAfterAI() {
+        guard let kind = toolBeforeAI else { return }
+        toolBeforeAI = nil
+        var s = settings
+        s.kind = kind
+        settings = s
     }
 
     func close() {
         aiMode = false
+        restoreToolAfterAI()
         column?.deactivateAll()
         library.closeDocument(doc.id)
         var s = tools.settings

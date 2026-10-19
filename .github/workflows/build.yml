@@ -65,7 +65,21 @@ jobs:
           else
             echo "No result bundle at build/tour.xcresult"
           fi
-          # keep only images; drop screen recordings and other attachments
+          # name each exported image after its human-readable name from the manifest
+          if [ -f build/tour/manifest.json ]; then
+            jq -r '.. | objects | select(has("exportedFileName") and has("suggestedHumanReadableName")) | [.exportedFileName, .suggestedHumanReadableName] | @tsv' build/tour/manifest.json |
+            while IFS=$'\t' read -r file name; do
+              case "$file" in *.png|*.jpg) ;; *) continue ;; esac
+              [ -f "build/tour/$file" ] || continue
+              ext="${file##*.}"
+              name="${name//\//_}"
+              case "$name" in *."$ext") ;; *) name="$name.$ext" ;; esac
+              [ "$name" = "$file" ] || mv -n "build/tour/$file" "build/tour/$name" || true
+            done
+          else
+            echo "No manifest at build/tour/manifest.json; leaving exported names as they are"
+          fi
+          # keep only images; drop the manifest, screen recordings and other attachments
           find build/tour -type f ! -iname '*.png' ! -iname '*.jpg' -delete
           ls -la build/tour | head -n 80
       - name: Upload tour screenshots

@@ -32,7 +32,6 @@ struct AIPanel: View {
         .overlay(alignment: .trailing) {
             Rectangle().fill(Color(.separator)).frame(width: 0.5).ignoresSafeArea()
         }
-        .shadow(color: .black.opacity(0.2), radius: 10, x: 2)
     }
 
     private var header: some View {
