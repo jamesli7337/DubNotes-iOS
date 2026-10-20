@@ -70,7 +70,29 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
     private(set) var canvas: PKCanvasView?
     let overlay = OverlayView()
     private var guideView: GuideView?
+    private var guideHost: PassthroughView?
+    /// Where the guide's own (0, 0) sits in this view's coordinates; zero on a normal page.
+    private var guideOrigin = CGPoint.zero
     private var eraseGR: UIPanGestureRecognizer?
+
+    // MARK: Board window
+
+    /// A board is one huge page, so paper, overlay and canvas cover only a window of it: the visible area plus a
+    /// margin, in this view's (board) coordinates. It moves, and the layers redraw, only when the visible area
+    /// leaves it (or the window has grown far larger than the zoom needs). Empty on a normal page.
+    private(set) var boardWindow = CGRect.zero
+    static let windowMarginFraction: CGFloat = 0.5
+    static let windowMinMargin: CGFloat = 256
+    /// How much bigger than the wanted window the current one may be before it is cut back down (after a zoom in).
+    static let windowOversize: CGFloat = 6
+    /// Pixel budget for one layer, shared with normal pages.
+    static let layerPixelBudget: CGFloat = 8_000_000
+    /// Board strokes as loaded: by id, as stored (board coordinates) and as handed to the canvas (shifted by minus
+    /// the window origin, which keeps PencilKit's coordinates small).
+    private var boardShown: [String: Stroke] = [:]
+    private var boardLocal: [String: Stroke] = [:]
+
+    var isBoard: Bool { session.doc.isBoard }
 
     // MARK: Content
 
@@ -122,6 +144,7 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         self.session = session
         let p = session.doc.page(pageId)
         super.init(frame: CGRect(x: 0, y: 0, width: p?.pageWidth ?? PageUnits.width, height: p?.pageHeight ?? PageUnits.height))
+        if let p, p.originX != 0 || p.originY != 0 { bounds.origin = CGPoint(x: p.originX, y: p.originY) }
         clipsToBounds = true
         layer.cornerRadius = 6
         backgroundColor = UIColor.fromHex(PaperStyle.ink((p ?? Page.placeholder).paper.color).bg)
@@ -136,11 +159,13 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         guard !mounted else { return }
         mounted = true
         let b = BackLayerView(page: currentPage)
-        b.frame = bounds
+        b.windowed = isBoard
+        let first = isBoard ? CGRect.zero : bounds // a board's layers get their window in a moment
+        b.frame = first
         addSubview(b)
         back = b
 
-        let c = PKCanvasView(frame: bounds)
+        let c = PKCanvasView(frame: first)
         c.backgroundColor = .clear
         c.isOpaque = false
         c.overrideUserInterfaceStyle = .light // keep inks as stored; PencilKit would otherwise invert black / white
@@ -152,7 +177,7 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         canvas = c
 
         overlay.owner = self
-        overlay.frame = bounds
+        overlay.frame = first
         addSubview(overlay)
 
         let erase = UIPanGestureRecognizer(target: self, action: #selector(erasePan(_:)))
@@ -162,6 +187,7 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         addGestureRecognizer(erase)
         eraseGR = erase
 
+        if isBoard { chooseWindow(force: true) }
         reload()
         applyTool()
         syncGuide()
@@ -177,10 +203,12 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         laser = []
         if let g = eraseGR { removeGestureRecognizer(g) }
         eraseGR = nil
-        for v in [back, canvas, overlay, guideView] as [UIView?] { v?.removeFromSuperview() }
+        for v in [back, canvas, overlay, guideView, guideHost] as [UIView?] { v?.removeFromSuperview() }
         back = nil
         canvas = nil
         guideView = nil
+        guideHost = nil
+        boardWindow = .zero
         mounted = false
         mode = .none
         xf = nil
@@ -190,7 +218,11 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
     /// Re-reads everything from the document.
     func reload() {
         let page = currentPage
-        if abs(bounds.width - page.pageWidth) > 0.5 || abs(bounds.height - page.pageHeight) > 0.5 {
+        if isBoard {
+            // the extent grew (or, toward the origin, moved); board coordinates stay put, only the origin shifts
+            let extent = CGRect(x: page.originX, y: page.originY, width: page.pageWidth, height: page.pageHeight)
+            if bounds != extent { bounds = extent }
+        } else if abs(bounds.width - page.pageWidth) > 0.5 || abs(bounds.height - page.pageHeight) > 0.5 {
             // the page changed size; the column re-lays-out, then the layers follow
             bounds = CGRect(x: 0, y: 0, width: page.pageWidth, height: page.pageHeight)
             for v in [back, canvas, overlay] as [UIView?] { v?.frame = bounds }
@@ -219,6 +251,18 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         guard mounted else { return }
         // pixels per page unit follow the zoom, capped so one layer never needs more than ~8 million pixels
         let page = currentPage
+        if isBoard {
+            // a window zoomed far out covers a lot of board, so its layers may be rendered below 1x
+            let cap = (Self.layerPixelBudget / max(boardWindow.width * boardWindow.height, 1)).squareRoot()
+            let s = max(0.1, min(UIScreen.main.scale * CGFloat(zoom), 4, cap))
+            back?.contentScaleFactor = s
+            overlay.contentScaleFactor = max(0.1, min(s, 2))
+            guideView?.contentScaleFactor = max(1, min(s, 3))
+            guideView?.zoom = CGFloat(zoom)
+            back?.setNeedsDisplay()
+            overlay.setNeedsDisplay()
+            return
+        }
         let cap = CGFloat((8_000_000 / max(page.pageWidth * page.pageHeight, 1)).squareRoot())
         let s = max(1, min(UIScreen.main.scale * CGFloat(zoom), 4, cap))
         back?.contentScaleFactor = s
@@ -229,18 +273,91 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         overlay.setNeedsDisplay()
     }
 
+    // MARK: Board window
+
+    /// Called as the board scrolls or zooms: moves the window if the visible area has left it.
+    func updateWindow() {
+        guard isBoard, mounted, mode == .none, xf == nil else { return }
+        chooseWindow(force: false)
+        updateScale()
+    }
+
+    /// Picks the window for the visible area: visible plus a margin, held to the board. Nothing changes while the
+    /// current window still holds the visible area and is not wastefully large.
+    private func chooseWindow(force: Bool) {
+        var vis = column?.visibleRect(in: self) ?? .zero
+        vis = vis.intersection(bounds)
+        if vis.isNull || vis.isEmpty {
+            // not laid out yet: start around the origin chunk
+            let c = NotebookDocument.boardChunkSize
+            vis = CGRect(x: 0, y: 0, width: c, height: c).intersection(bounds)
+        }
+        let mx = max(vis.width * Self.windowMarginFraction, Self.windowMinMargin)
+        let my = max(vis.height * Self.windowMarginFraction, Self.windowMinMargin)
+        let wanted = vis.insetBy(dx: -mx, dy: -my).intersection(bounds).integral
+        if !force, !boardWindow.isEmpty, boardWindow.insetBy(dx: -0.5, dy: -0.5).contains(vis),
+           boardWindow.width * boardWindow.height <= wanted.width * wanted.height * Self.windowOversize {
+            return
+        }
+        boardWindow = wanted
+        layoutLayers()
+        reloadInk()
+        back?.setNeedsDisplay()
+        overlay.setNeedsDisplay()
+    }
+
+    /// Puts the paper, ink and overlay layers over the window.
+    private func layoutLayers() {
+        guard isBoard else { return }
+        back?.cover(boardWindow)
+        overlay.cover(boardWindow)
+        canvas?.frame = boardWindow // PencilKit's own coordinates stay at (0, 0): see `reloadInk`
+    }
+
     // MARK: Ink
 
     /// Rebuilds the canvas drawing from the model (minus anything lifted off for a drag).
     func reloadInk() {
         guard let canvas else { return }
         let all = session.doc.strokes(of: pageId)
+        if isBoard {
+            // only strokes touching the window go to the canvas, shifted so PencilKit works near (0, 0); every
+            // other stroke waits in `inkHidden`, which keeps the reconcile below from reading it as erased
+            let inWindow = all.filter { s in
+                guard !hiddenIds.contains(s.id) else { return false }
+                let b = Geometry.itemBounds(.stroke(s))
+                return CGRect(x: b.x, y: b.y, width: b.w, height: b.h).intersects(boardWindow)
+            }
+            let shift = CGPoint(x: -boardWindow.minX, y: -boardWindow.minY)
+            let local = inWindow.map { shifted($0, by: shift) }
+            boardShown = Dictionary(inWindow.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            boardLocal = Dictionary(local.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            inkHidden = all.filter { boardShown[$0.id] == nil }
+            baseline = local
+            loadingInk = true
+            canvas.drawing = StrokeConverter.drawing(local, paper: currentPage.paper)
+            loadingInk = false
+            return
+        }
         inkHidden = all.filter { hiddenIds.contains($0.id) }
         let shown = all.filter { !hiddenIds.contains($0.id) }
         baseline = shown
         loadingInk = true
         canvas.drawing = StrokeConverter.drawing(shown, paper: currentPage.paper)
         loadingInk = false
+    }
+
+    private func shifted(_ s: Stroke, by d: CGPoint) -> Stroke {
+        var out = s
+        out.points = s.points.map { StrokePoint(x: $0.x + Double(d.x), y: $0.y + Double(d.y), pressure: $0.pressure) }
+        return out
+    }
+
+    /// A stroke from the (shifted) canvas, back in board coordinates. One the user did not touch comes back as
+    /// the stored stroke itself, so its points do not pick up rounding from the round trip.
+    private func toBoard(_ s: Stroke) -> Stroke {
+        if let real = boardShown[s.id], boardLocal[s.id] == s { return real }
+        return shifted(s, by: boardWindow.origin)
     }
 
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
@@ -251,7 +368,7 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         let rec = StrokeConverter.reconcile(canvasView.drawing, baseline: baseline, pageId: pageId,
                                             notebookId: session.doc.id, paper: currentPage.paper,
                                             tool: tool, nib: nib, now: LibraryStore.now())
-        let merged = rec.strokes + inkHidden
+        let merged = (isBoard ? rec.strokes.map(toBoard) : rec.strokes) + inkHidden
         let old = session.doc.strokes(of: pageId)
         let oldIds = Set(old.map(\.id))
         let newIds = Set(merged.map(\.id))
@@ -275,16 +392,19 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         }
         session.inkEdited(pageId: pageId, removed: removed, added: added, canvasInSync: true)
         if !removed.isEmpty { pruneSelection() }
+        if isBoard { column?.boardEdited() } // the session did not repaint, so the extent is regrown here
     }
 
     /// A stroke that began beside the guide's straight edge runs along that edge.
     private func snapToGuide(_ s: Stroke) -> Stroke? {
+        // the guide measures from its own origin (zero on a normal page)
+        let ox = Double(guideOrigin.x), oy = Double(guideOrigin.y)
         guard let g = guideView, let first = s.points.first,
-              let edge = g.edgeNear(first.x, first.y) else { return nil }
+              let edge = g.edgeNear(first.x - ox, first.y - oy) else { return nil }
         var out = s
         out.points = s.points.map { p in
-            let q = edge.project(p.x, p.y)
-            return StrokePoint(x: q.x, y: q.y, pressure: p.pressure)
+            let q = edge.project(p.x - ox, p.y - oy)
+            return StrokePoint(x: q.x + ox, y: q.y + oy, pressure: p.pressure)
         }
         return out
     }
@@ -341,10 +461,29 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
         if let g = guideView, g.geometry.kind == wanted { return }
         guideView?.removeFromSuperview()
         guideView = nil
+        guideHost?.removeFromSuperview()
+        guideHost = nil
+        guideOrigin = .zero
         if let kind = wanted {
             let g = GuideView(kind: kind, page: currentPage)
             g.zoom = CGFloat(zoom)
-            insertSubview(g, belowSubview: overlay)
+            if isBoard {
+                // The guide clamps itself to a page-sized box starting at (0, 0). Give it a host that is as big as
+                // the board and positioned so the guide's starting spot is the middle of what is on screen.
+                let page = currentPage
+                let vis = column?.visibleRect(in: self) ?? .zero
+                let mid = vis.isEmpty ? CGPoint(x: NotebookDocument.boardChunkSize / 2, y: NotebookDocument.boardChunkSize / 2)
+                                      : CGPoint(x: vis.midX, y: vis.midY)
+                let startY = page.pageHeight * (kind == .ruler ? 0.4 : 0.45)
+                let origin = CGPoint(x: mid.x - page.pageWidth / 2, y: mid.y - startY)
+                let host = PassthroughView(frame: CGRect(origin: origin, size: CGSize(width: page.pageWidth, height: page.pageHeight)))
+                host.addSubview(g)
+                insertSubview(host, belowSubview: overlay)
+                guideHost = host
+                guideOrigin = origin
+            } else {
+                insertSubview(g, belowSubview: overlay)
+            }
             guideView = g
             updateScale()
         }
@@ -398,6 +537,14 @@ final class PageView: UIView, PKCanvasViewDelegate, UIGestureRecognizerDelegate,
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         gestureRecognizer === eraseGR
+    }
+}
+
+/// Holds subviews without taking touches of its own.
+final class PassthroughView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
     }
 }
 

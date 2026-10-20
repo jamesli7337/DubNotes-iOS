@@ -2,7 +2,7 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Opens a notebook full screen. A board's canvas isn't built (its data is kept), so it shows a notice.
+/// Opens a notebook full screen. A board opens in the same editor, as one unbounded page.
 struct NotebookScreen: View {
     let store: LibraryStore
     let notebookId: String
@@ -14,11 +14,7 @@ struct NotebookScreen: View {
     var body: some View {
         Group {
             if let session {
-                if session.doc.notebook.isBoard {
-                    BoardPlaceholder(name: session.title) { close(session) }
-                } else {
-                    NotebookContent(session: session) { close(session) }
-                }
+                NotebookContent(session: session) { close(session) }
             } else if failed {
                 ContentUnavailableView("Can’t open this notebook", systemImage: "exclamationmark.triangle",
                                        description: Text("Its files could not be read."))
@@ -36,21 +32,6 @@ struct NotebookScreen: View {
     private func close(_ s: NotebookSession) {
         s.close()
         onClose()
-    }
-}
-
-private struct BoardPlaceholder: View {
-    let name: String
-    let onBack: () -> Void
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(name, systemImage: "square.grid.2x2")
-        } description: {
-            Text("Boards can’t be opened in this version. Everything on this board is kept and will appear when board support arrives.")
-        } actions: {
-            Button("Back to library", action: onBack).buttonStyle(.borderedProminent)
-        }
     }
 }
 
@@ -102,6 +83,9 @@ struct NotebookContent: View {
     @State private var bottomChromeHeight: CGFloat = 0
 
     private var settings: ToolSettings { session.settings }
+
+    /// A board has no pages, so the page manager, PDF page import, per-page export and AI mode don't apply.
+    private var isBoard: Bool { session.doc.isBoard }
 
     /// With the AI panel open it takes its own width on the left and the notebook fills the rest.
     var body: some View {
@@ -260,19 +244,21 @@ struct NotebookContent: View {
 
     private var rightIsland: some View {
         HStack(spacing: 0) {
-            Button { toggleAIMode() } label: {
-                islandIcon("cpu")
-                    .foregroundStyle(session.aiMode ? Color.white : Color.primary)
-                    .background(session.aiMode ? AITheme.violet : Color.clear, in: Capsule())
+            if !isBoard {
+                Button { toggleAIMode() } label: {
+                    islandIcon("cpu")
+                        .foregroundStyle(session.aiMode ? Color.white : Color.primary)
+                        .background(session.aiMode ? AITheme.violet : Color.clear, in: Capsule())
+                }
+                .accessibilityLabel("AI mode")
+                .accessibilityAddTraits(session.aiMode ? .isSelected : [])
+                Button {
+                    setAIPanel(open: true)
+                    session.aiChats.sendStub()
+                } label: { islandIcon("paperplane").opacity(session.aiMode ? 1 : 0.35) }
+                    .disabled(!session.aiMode)
+                    .accessibilityLabel("Send to AI")
             }
-            .accessibilityLabel("AI mode")
-            .accessibilityAddTraits(session.aiMode ? .isSelected : [])
-            Button {
-                setAIPanel(open: true)
-                session.aiChats.sendStub()
-            } label: { islandIcon("paperplane").opacity(session.aiMode ? 1 : 0.35) }
-                .disabled(!session.aiMode)
-                .accessibilityLabel("Send to AI")
             Menu {
                 Button { sheet = .notebookPicker } label: { Label("Split screen page", systemImage: "book") }
                 Button { photoPurpose = .splitImage; photosOpen = true } label: { Label("Split screen image", systemImage: "photo") }
@@ -280,16 +266,20 @@ struct NotebookContent: View {
             } label: { islandIcon("rectangle.split.2x1") }
                 .accessibilityLabel("Split screen")
             Menu {
-                Button { importerPurpose = .pdfPages; importerOpen = true } label: { Label("Import PDF pages", systemImage: "square.and.arrow.down") }
+                if !isBoard {
+                    Button { importerPurpose = .pdfPages; importerOpen = true } label: { Label("Import PDF pages", systemImage: "square.and.arrow.down") }
+                }
                 Button { photoPurpose = .insert; photosOpen = true } label: { Label("Insert image", systemImage: "photo") }
             } label: { islandIcon("square.and.arrow.down") }
                 .disabled(session.aiMode)
                 .accessibilityLabel("Import")
-            Menu { exportMenu } label: { islandIcon("square.and.arrow.up") }
-                .accessibilityLabel("Export")
-            Button { sheet = .pages } label: { islandIcon("square.grid.2x2") }
-                .disabled(session.aiMode)
-                .accessibilityLabel("Manage pages")
+            if !isBoard {
+                Menu { exportMenu } label: { islandIcon("square.and.arrow.up") }
+                    .accessibilityLabel("Export")
+                Button { sheet = .pages } label: { islandIcon("square.grid.2x2") }
+                    .disabled(session.aiMode)
+                    .accessibilityLabel("Manage pages")
+            }
             Button {
                 if let page = session.currentPage { sheet = .paper(page) }
             } label: { islandIcon("list.clipboard") }

@@ -16,9 +16,13 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
     static let mountMarginMax: CGFloat = 1400
     static let maxMountedPages = 5
 
+    /// A board is one slot with no "Page N" label, panned and zoomed freely.
+    static let boardZoomMin: CGFloat = 0.2
+    static let boardZoomStart: CGFloat = 1
+
     private struct Slot {
         let view: PageView
-        let label: UILabel
+        let label: UILabel?
     }
 
     unowned let session: NotebookSession
@@ -36,6 +40,11 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
     private let aiOutline = AIModeOutlineView()
     private var aiLayers: [String: AIInkLayer] = [:]
     private var lastLayoutWidth: CGFloat = 0
+    /// Where the board's extent starts, in board coordinates, as of the last layout.
+    private var boardOrigin: CGPoint?
+
+    private var isBoard: Bool { session.doc.isBoard }
+    private var minZoom: CGFloat { isBoard ? Self.boardZoomMin : Self.zoomMin }
 
     var topInset: CGFloat = 0 { didSet { if topInset != oldValue { applyInsets() } } }
     var bottomInset: CGFloat = 0 { didSet { if bottomInset != oldValue { applyInsets() } } }
@@ -46,7 +55,7 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
         super.init()
         scrollView.delegate = self
         scrollView.controller = self
-        scrollView.minimumZoomScale = Self.zoomMin
+        scrollView.minimumZoomScale = minZoom
         scrollView.maximumZoomScale = Self.zoomMax
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.showsHorizontalScrollIndicator = false
@@ -71,12 +80,16 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
 
     /// Reconciles the page views against the document: gone pages are torn down, new ones built, order restored.
     func syncPages() {
+        if isBoard {
+            syncBoard()
+            return
+        }
         let pages = session.doc.pages
         let wanted = Set(pages.map(\.id))
         for (id, slot) in slots where !wanted.contains(id) {
             slot.view.unmount()
             slot.view.removeFromSuperview()
-            slot.label.removeFromSuperview()
+            slot.label?.removeFromSuperview()
             slots[id] = nil
         }
         for p in pages where slots[p.id] == nil {
@@ -96,6 +109,56 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
         syncSelectionAfterStructure()
     }
 
+    /// A board is one virtual page (see `NotebookDocument.boardSurfaceId`) in a single slot.
+    private func syncBoard() {
+        let id = session.doc.boardSurfaceId
+        if slots[id] == nil {
+            let v = PageView(pageId: id, session: session)
+            v.column = self
+            content.addSubview(v)
+            slots[id] = Slot(view: v, label: nil)
+        }
+        order = [id]
+        session.currentPageId = id
+        relayoutBoard()
+        updateMounted()
+        syncSelectionAfterStructure()
+    }
+
+    /// Sizes the board's page view to the document's extent, which grows (or moves) as items are added. When
+    /// the extent grows toward the negative side the content shifts, so the scroll offset follows to keep the
+    /// same part of the board on screen.
+    private func relayoutBoard() {
+        let id = session.doc.boardSurfaceId
+        guard let slot = slots[id], let page = session.doc.page(id) else { return }
+        let w = CGFloat(page.pageWidth), h = CGFloat(page.pageHeight)
+        let origin = CGPoint(x: page.originX, y: page.originY)
+        let previous = boardOrigin
+        boardOrigin = origin
+        slot.view.bounds = CGRect(x: origin.x, y: origin.y, width: w, height: h)
+        slot.view.center = CGPoint(x: w / 2, y: h / 2)
+        contentSize = CGSize(width: w, height: h)
+        applyContentSize()
+        if didInitialZoom, let previous, previous != origin {
+            let z = scrollView.zoomScale
+            var off = scrollView.contentOffset
+            off.x += (previous.x - origin.x) * z
+            off.y += (previous.y - origin.y) * z
+            scrollView.contentOffset = off
+        }
+    }
+
+    /// An edit that did not go through `refresh` (ink the canvas already shows): regrow the extent.
+    func boardEdited() {
+        guard isBoard else { return }
+        relayoutBoard()
+    }
+
+    /// The visible part of the scroll view, in a page view's own coordinates (board coordinates on a board).
+    func visibleRect(in view: PageView) -> CGRect {
+        scrollView.convert(scrollView.bounds, to: view)
+    }
+
     private func syncSelectionAfterStructure() {
         if let sel = session.selection, slots[sel.pageId] == nil { session.selection = nil }
         updateCallout()
@@ -103,6 +166,17 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
 
     /// Repaints these pages from the document.
     func refresh(pageIds: [String]) {
+        if isBoard {
+            // every edit may have grown (or shrunk) the extent: lay out first, then repaint
+            relayoutBoard()
+            for id in pageIds {
+                guard let slot = slots[id] else { continue }
+                if slot.view.mounted { slot.view.reload() } else { slot.view.paperChanged() }
+            }
+            updateMounted()
+            updateCallout()
+            return
+        }
         var layoutChanged = false
         for id in pageIds {
             guard let slot = slots[id], let page = session.doc.page(id) else { continue }
@@ -128,8 +202,8 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
             guard let slot = slots[p.id] else { continue }
             let w = CGFloat(p.pageWidth), h = CGFloat(p.pageHeight)
             let x = (contentW - w) / 2
-            slot.label.text = "Page \(i + 1)"
-            slot.label.frame = CGRect(x: x + 2, y: y, width: w, height: Self.labelHeight)
+            slot.label?.text = "Page \(i + 1)"
+            slot.label?.frame = CGRect(x: x + 2, y: y, width: w, height: Self.labelHeight)
             y += Self.labelHeight
             slot.view.bounds = CGRect(x: 0, y: 0, width: w, height: h)
             slot.view.frame = CGRect(x: x, y: y, width: w, height: h)
@@ -153,7 +227,9 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
 
     private func applyInsets() {
         let slack = max((scrollView.bounds.width - scrollView.contentSize.width) / 2, 0)
-        let insets = UIEdgeInsets(top: topInset, left: slack, bottom: bottomInset + keyboardHeight + scrollView.bounds.height * 0.4, right: slack)
+        // a board's pan stays inside its extent; a notebook scrolls a little past its last page
+        let tail = isBoard ? 0 : scrollView.bounds.height * 0.4
+        let insets = UIEdgeInsets(top: topInset, left: slack, bottom: bottomInset + keyboardHeight + tail, right: slack)
         if scrollView.contentInset != insets { scrollView.contentInset = insets }
     }
 
@@ -163,14 +239,20 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
         guard scrollView.bounds.width > 0 else { return }
         let width = scrollView.bounds.width
         defer { lastLayoutWidth = width }
-        if didInitialZoom, lastLayoutWidth > 0, abs(width - lastLayoutWidth) > 0.5 {
+        if didInitialZoom, !isBoard, lastLayoutWidth > 0, abs(width - lastLayoutWidth) > 0.5 {
             // the column got wider or narrower (the AI panel opening, a rotation): keep the same share of the page in view
             let z = scrollView.zoomScale * width / lastLayoutWidth
             scrollView.zoomScale = min(max(z, Self.zoomMin), Self.zoomMax)
             applyContentSize()
             applyInsets()
         }
-        if !didInitialZoom {
+        if !didInitialZoom, isBoard {
+            didInitialZoom = true
+            scrollView.zoomScale = min(max(Self.boardZoomStart, minZoom), Self.zoomMax)
+            applyContentSize()
+            applyInsets()
+            centreOnOriginChunk()
+        } else if !didInitialZoom {
             didInitialZoom = true
             // open fitted to the width when the page is wider than the screen, 100% otherwise
             let firstW = CGFloat(session.doc.pages.first?.pageWidth ?? PageUnits.width)
@@ -184,6 +266,22 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
         updateCallout()
     }
 
+    /// Opens a board with the middle of its origin chunk in the middle of the area between the top and bottom chrome.
+    private func centreOnOriginChunk() {
+        let z = scrollView.zoomScale
+        let origin = boardOrigin ?? .zero
+        let mid = NotebookDocument.boardChunkSize / 2
+        let inset = scrollView.contentInset
+        let areaMidY = topInset + (scrollView.bounds.height - topInset - bottomInset) / 2
+        var off = CGPoint(x: (CGFloat(mid) - origin.x) * z - scrollView.bounds.width / 2,
+                          y: (CGFloat(mid) - origin.y) * z - areaMidY)
+        let maxX = scrollView.contentSize.width - scrollView.bounds.width + inset.right
+        let maxY = scrollView.contentSize.height - scrollView.bounds.height + inset.bottom
+        off.x = min(max(off.x, -inset.left), max(maxX, -inset.left))
+        off.y = min(max(off.y, -inset.top), max(maxY, -inset.top))
+        scrollView.contentOffset = off
+    }
+
     // MARK: UIScrollViewDelegate
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { content }
@@ -195,7 +293,8 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
     }
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
-        for slot in slots.values { slot.view.updateScale() }
+        // on a board this also cuts the window back to what the new zoom needs
+        for slot in slots.values { slot.view.updateWindow(); slot.view.updateScale() }
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -213,6 +312,17 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
     /// Mounts the pages near the viewport (nearest five at most) and tears the rest down.
     func updateMounted() {
         guard scrollView.bounds.height > 0 else { return }
+        if isBoard {
+            // the one board view stays mounted; it moves its own window when the visible area leaves it
+            guard let v = order.first.flatMap({ slots[$0]?.view }) else { return }
+            if v.mounted {
+                v.updateWindow()
+            } else {
+                v.mount()
+                v.updateScale()
+            }
+            return
+        }
         let z = max(scrollView.zoomScale, 0.1)
         let margin = min(Self.mountMarginScreen / z, Self.mountMarginMax)
         let vis = visibleRect()
@@ -241,6 +351,7 @@ final class PageColumnController: NSObject, UIScrollViewDelegate {
     }
 
     private func updateCurrentPage() {
+        guard !isBoard else { return } // a board has one surface; `syncBoard` made it current
         let midY = visibleRect().midY
         var best: String?
         var bestD = CGFloat.infinity

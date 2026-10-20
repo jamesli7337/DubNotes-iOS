@@ -18,7 +18,7 @@ struct PaperSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Page \(page.index + 1) paper")
+            Text(session.doc.isBoard ? "Board paper" : "Page \(page.index + 1) paper")
                 .font(.title3.weight(.semibold))
             field("Template") {
                 Picker("Template", selection: $draft.template) {
@@ -43,10 +43,12 @@ struct PaperSheet: View {
                     Text("Dark").tag(Paper.Color.dark)
                 }
             }
-            field("Apply to") {
-                Picker("Apply to", selection: $allPages) {
-                    Text("This page").tag(false)
-                    Text("All pages").tag(true)
+            if !session.doc.isBoard { // a board has one paper, which always applies to the whole surface
+                field("Apply to") {
+                    Picker("Apply to", selection: $allPages) {
+                        Text("This page").tag(false)
+                        Text("All pages").tag(true)
+                    }
                 }
             }
             Button {

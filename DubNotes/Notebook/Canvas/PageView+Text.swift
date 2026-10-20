@@ -6,11 +6,13 @@ extension PageView {
         let s = settings
         let size = ToolSettings.textDefaultSize
         let page = currentPage
-        let w = max(min(ToolSettings.textDefaultWidth, page.pageWidth - pt.x), 60)
         let lineH = size * TextLayout.lineHeightFactor
+        // a board has no page edge to keep the box inside
+        let w = isBoard ? ToolSettings.textDefaultWidth : max(min(ToolSettings.textDefaultWidth, page.pageWidth - pt.x), 60)
+        let y = isBoard ? pt.y - lineH * 0.5 : min(max(pt.y - lineH * 0.5, 0), page.pageHeight - size)
         let t = PageElement.Text(text: "", color: s.textColor, fontSize: size, bg: nil)
         return PageElement(id: UUID().uuidString, pageId: pageId, notebookId: session.doc.id,
-                           x: pt.x, y: min(max(pt.y - lineH * 0.5, 0), page.pageHeight - size),
+                           x: pt.x, y: y,
                            w: w, h: lineH, rotation: 0, createdAt: LibraryStore.now(), content: .text(t))
     }
 

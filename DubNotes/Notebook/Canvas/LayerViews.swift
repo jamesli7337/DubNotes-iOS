@@ -28,7 +28,12 @@ final class BackLayerView: UIView {
         setNeedsDisplay()
     }
 
-    private var unit: Double { max(Double(contentScaleFactor), 1) }
+    /// A board layer covers only a window of the board (see `PageView.updateWindow`): its bounds origin is the
+    /// window's board position, so drawing coordinates are board coordinates, and it paints just that window.
+    var windowed = false
+
+    /// Device pixels per unit. A windowed layer may be rendered below 1x when the board is zoomed far out.
+    private var unit: Double { windowed ? max(Double(contentScaleFactor), 0.05) : max(Double(contentScaleFactor), 1) }
 
     /// Starts rendering the background PDF page at the resolution the current zoom needs.
     private func requestBackground() {
@@ -48,8 +53,33 @@ final class BackLayerView: UIView {
         }
     }
 
+    /// Paper and elements for the part of the window in `rect` (board coordinates) and nothing outside it.
+    private func drawWindow(_ ctx: CGContext, _ rect: CGRect) {
+        // the template is drawn from an origin that is a whole number of ruling gaps, kept clear of the window,
+        // so the ruling lands on the same board positions whichever window is showing
+        let gap = PaperStyle.gap(page.paper.spacing)
+        let ox = ((rect.minX - 2 * gap) / gap).rounded(.down) * gap
+        let oy = ((rect.minY - 2 * gap) / gap).rounded(.down) * gap
+        ctx.saveGState()
+        ctx.clip(to: rect)
+        ctx.translateBy(x: ox, y: oy)
+        PaperRenderer.drawTemplate(page.paper, in: ctx, width: rect.maxX - ox + gap, height: rect.maxY - oy + gap, unit: unit)
+        ctx.restoreGState()
+        let near = rect.insetBy(dx: -32, dy: -32)
+        for e in elements where !hiddenIds.contains(e.id) && !PageView.isAboveInk(e) {
+            let b = Geometry.itemBounds(.element(e))
+            if CGRect(x: b.x, y: b.y, width: b.w, height: b.h).intersects(near) {
+                ElementRenderer.draw(e, in: ctx, paper: page.paper)
+            }
+        }
+    }
+
     override func draw(_ rect: CGRect) {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        if windowed {
+            drawWindow(ctx, rect)
+            return
+        }
         PaperRenderer.drawTemplate(page.paper, in: ctx, width: page.pageWidth, height: page.pageHeight, unit: unit)
         if let bg = page.background {
             requestBackground()
@@ -60,6 +90,16 @@ final class BackLayerView: UIView {
         for e in elements where !hiddenIds.contains(e.id) && !PageView.isAboveInk(e) {
             ElementRenderer.draw(e, in: ctx, paper: page.paper)
         }
+    }
+}
+
+extension UIView {
+    /// Puts a layer over `rect`, in the superview's coordinates, and gives it the same origin, so the layer's own
+    /// coordinates equal the superview's. A page view whose bounds start at the board's origin passes these on
+    /// as board coordinates.
+    func cover(_ rect: CGRect) {
+        bounds = CGRect(origin: rect.origin, size: rect.size)
+        center = CGPoint(x: rect.midX, y: rect.midY)
     }
 }
 

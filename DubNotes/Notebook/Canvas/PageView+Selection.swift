@@ -219,10 +219,15 @@ extension PageView {
     /// Puts a loaded image in the middle of the page, selected.
     func insertImage(src: String, naturalWidth: Double, naturalHeight: Double) {
         let page = currentPage
-        let size = PageSizing.insertedImageSize(naturalW: naturalWidth, naturalH: naturalHeight,
-                                                pageW: page.pageWidth, pageH: page.pageHeight)
+        // on a board the image is sized like a normal page's and dropped in the middle of what is on screen
+        let vis = isBoard ? (column?.visibleRect(in: self) ?? .zero) : .zero
+        let sizeW = isBoard ? PageUnits.width : page.pageWidth
+        let sizeH = isBoard ? PageUnits.height : page.pageHeight
+        let size = PageSizing.insertedImageSize(naturalW: naturalWidth, naturalH: naturalHeight, pageW: sizeW, pageH: sizeH)
+        let midX = isBoard ? (vis.isEmpty ? NotebookDocument.boardChunkSize / 2 : Double(vis.midX)) : page.pageWidth / 2
+        let midY = isBoard ? (vis.isEmpty ? NotebookDocument.boardChunkSize / 2 : Double(vis.midY)) : page.pageHeight / 2
         let el = PageElement(id: UUID().uuidString, pageId: pageId, notebookId: session.doc.id,
-                             x: (page.pageWidth - size.w) / 2, y: (page.pageHeight - size.h) / 2, w: size.w, h: size.h,
+                             x: midX - size.w / 2, y: midY - size.h / 2, w: size.w, h: size.h,
                              rotation: 0, createdAt: LibraryStore.now(), content: .image(PageElement.Image(src: src)))
         session.add([.element(el)], to: pageId)
         select(ids: [el.id])

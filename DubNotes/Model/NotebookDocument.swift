@@ -8,6 +8,7 @@ final class NotebookDocument {
     private(set) var pages: [Page]
     private var strokesByPage: [String: [Stroke]] = [:]
     private var elementsByPage: [String: [PageElement]] = [:]
+    private var extentCache: PageRect?
 
     /// Pages whose content (strokes/elements) or record changed since the last save.
     private(set) var dirtyPages: Set<String> = []
@@ -32,11 +33,24 @@ final class NotebookDocument {
 
     var id: String { notebook.id }
 
-    func page(_ id: String) -> Page? { pages.first { $0.id == id } }
+    func page(_ id: String) -> Page? {
+        if isBoardSurface(id) { return boardSurfacePage() }
+        return pages.first { $0.id == id }
+    }
 
-    func strokes(of pageId: String) -> [Stroke] { strokesByPage[pageId] ?? [] }
+    func strokes(of pageId: String) -> [Stroke] {
+        if isBoardSurface(pageId) { return strokesByPage.values.flatMap { $0 }.sorted { Self.zOrder($0.createdAt, $0.id, $1.createdAt, $1.id) } }
+        return strokesByPage[pageId] ?? []
+    }
 
-    func elements(of pageId: String) -> [PageElement] { elementsByPage[pageId] ?? [] }
+    func elements(of pageId: String) -> [PageElement] {
+        if isBoardSurface(pageId) { return elementsByPage.values.flatMap { $0 }.sorted { Self.zOrder($0.createdAt, $0.id, $1.createdAt, $1.id) } }
+        return elementsByPage[pageId] ?? []
+    }
+
+    private static func zOrder(_ ta: Double, _ ia: String, _ tb: Double, _ ib: String) -> Bool {
+        ta != tb ? ta < tb : ia < ib
+    }
 
     /// Everything on a page in z-order: strokes and elements interleaved by `createdAt`.
     func items(of pageId: String) -> [PageItem] {
@@ -203,11 +217,14 @@ final class NotebookDocument {
         return copy
     }
 
-    /// Paper change for one page, or every page when `allPages`.
+    /// Paper change for one page, or every page when `allPages`. A board has one paper, so it always applies to
+    /// every chunk (and the origin chunk is created if the board has none yet).
     func setPaper(_ pageId: String, paper: Paper, allPages: Bool) {
         guard page(pageId) != nil else { return }
+        let all = allPages || isBoard
+        if isBoard { ensureChunk(col: 0, row: 0) }
         let now = Self.now()
-        for i in pages.indices where allPages || pages[i].id == pageId {
+        for i in pages.indices where all || pages[i].id == pageId {
             pages[i].paper = paper
             pages[i].updatedAt = now
             markPage(pages[i].id)
@@ -244,6 +261,7 @@ final class NotebookDocument {
     }
 
     private func reindex() {
+        guard !isBoard else { return } // a board's chunks have no order; their index stays 0
         for i in pages.indices where pages[i].index != i {
             pages[i].index = i
             markPage(pages[i].id)
@@ -252,17 +270,23 @@ final class NotebookDocument {
 
     // MARK: Items
 
-    func addStroke(_ s: Stroke) {
+    func addStroke(_ stroke: Stroke) {
+        var s = stroke
+        if isBoard { s.pageId = boardChunk(for: .stroke(s)) }
         strokesByPage[s.pageId, default: []].append(s)
         strokesByPage[s.pageId]?.sort { $0.createdAt < $1.createdAt }
         markPage(s.pageId)
+        itemsChanged()
         touch()
     }
 
-    func addElement(_ e: PageElement) {
+    func addElement(_ element: PageElement) {
+        var e = element
+        if isBoard { e.pageId = boardChunk(for: .element(e)) }
         elementsByPage[e.pageId, default: []].append(e)
         elementsByPage[e.pageId]?.sort { $0.createdAt < $1.createdAt }
         markPage(e.pageId)
+        itemsChanged()
         touch()
     }
 
@@ -278,41 +302,66 @@ final class NotebookDocument {
     /// Removes by id from one page and returns what was removed.
     @discardableResult
     func removeItems(on pageId: String, ids: Set<String>) -> [PageItem] {
+        // on a board's surface the items sit in whichever chunk holds them
+        let holders = isBoardSurface(pageId) ? Array(Set(strokesByPage.keys).union(elementsByPage.keys)) : [pageId]
         var removed: [PageItem] = []
-        if let arr = strokesByPage[pageId] {
-            removed += arr.filter { ids.contains($0.id) }.map(PageItem.stroke)
-            strokesByPage[pageId] = arr.filter { !ids.contains($0.id) }
-        }
-        if let arr = elementsByPage[pageId] {
-            removed += arr.filter { ids.contains($0.id) }.map(PageItem.element)
-            elementsByPage[pageId] = arr.filter { !ids.contains($0.id) }
+        for holder in holders {
+            var here = false
+            if let arr = strokesByPage[holder] {
+                let gone = arr.filter { ids.contains($0.id) }
+                if !gone.isEmpty {
+                    removed += gone.map(PageItem.stroke)
+                    strokesByPage[holder] = arr.filter { !ids.contains($0.id) }
+                    here = true
+                }
+            }
+            if let arr = elementsByPage[holder] {
+                let gone = arr.filter { ids.contains($0.id) }
+                if !gone.isEmpty {
+                    removed += gone.map(PageItem.element)
+                    elementsByPage[holder] = arr.filter { !ids.contains($0.id) }
+                    here = true
+                }
+            }
+            if here { markPage(holder) }
         }
         if !removed.isEmpty {
-            markPage(pageId)
+            itemsChanged()
             touch()
         }
         return removed
     }
 
-    /// Swaps items in place by id, keeping z-order. Unknown ids are ignored.
+    /// Swaps items in place by id, keeping z-order (and, on a board, the chunk each one is stored in). Unknown ids
+    /// are ignored.
     func replaceItems(on pageId: String, with items: [PageItem]) {
+        let surface = isBoardSurface(pageId)
         var touched = false
         for it in items {
+            let holders = surface ? Array(Set(strokesByPage.keys).union(elementsByPage.keys)) : [pageId]
             switch it {
-            case .stroke(let s):
-                if let i = strokesByPage[pageId]?.firstIndex(where: { $0.id == s.id }) {
-                    strokesByPage[pageId]?[i] = s
+            case .stroke(var s):
+                for holder in holders {
+                    guard let i = strokesByPage[holder]?.firstIndex(where: { $0.id == s.id }) else { continue }
+                    if surface { s.pageId = holder }
+                    strokesByPage[holder]?[i] = s
+                    markPage(holder)
                     touched = true
+                    break
                 }
-            case .element(let e):
-                if let i = elementsByPage[pageId]?.firstIndex(where: { $0.id == e.id }) {
-                    elementsByPage[pageId]?[i] = e
+            case .element(var e):
+                for holder in holders {
+                    guard let i = elementsByPage[holder]?.firstIndex(where: { $0.id == e.id }) else { continue }
+                    if surface { e.pageId = holder }
+                    elementsByPage[holder]?[i] = e
+                    markPage(holder)
                     touched = true
+                    break
                 }
             }
         }
         if touched {
-            markPage(pageId)
+            itemsChanged()
             touch()
         }
     }
@@ -321,8 +370,100 @@ final class NotebookDocument {
     func setStrokes(_ strokes: [Stroke], on pageId: String) {
         strokesByPage[pageId] = strokes.sorted { $0.createdAt < $1.createdAt }
         markPage(pageId)
+        itemsChanged()
         touch()
     }
+
+    // MARK: Board
+
+    /// Cell size of a board's storage grid, in board units.
+    static let boardChunkSize = 2048.0
+    /// Room kept around the content (and the origin chunk) when sizing the board's extent.
+    static let boardPadding = 4096.0
+
+    var isBoard: Bool { notebook.isBoard }
+
+    /// The id the board's single virtual page answers to. Reading it returns every chunk's items combined; adding
+    /// to it files each item under the chunk its bounding box starts in. It has no chunk id's comma, so it can
+    /// never collide with one, and it is never stored.
+    var boardSurfaceId: String { "\(notebook.id):board" }
+
+    func isBoardSurface(_ pageId: String) -> Bool { isBoard && pageId == boardSurfaceId }
+
+    static func chunkId(notebookId: String, col: Int, row: Int) -> String { "\(notebookId):\(col),\(row)" }
+
+    /// The cell a chunk id names (`<notebookId>:<col>,<row>`), or nil when `pageId` is not one of this board's.
+    func chunkCell(of pageId: String) -> (col: Int, row: Int)? {
+        let prefix = "\(notebook.id):"
+        guard pageId.hasPrefix(prefix) else { return nil }
+        let parts = pageId.dropFirst(prefix.count).split(separator: ",", omittingEmptySubsequences: false)
+        guard parts.count == 2, let col = Int(parts[0]), let row = Int(parts[1]) else { return nil }
+        return (col, row)
+    }
+
+    /// The chunk a point falls in.
+    static func chunkCell(x: Double, y: Double) -> (col: Int, row: Int) {
+        (Int((x / boardChunkSize).rounded(.down)), Int((y / boardChunkSize).rounded(.down)))
+    }
+
+    /// Finds a chunk record, creating it (inheriting the board's paper) when it doesn't exist yet.
+    @discardableResult
+    func ensureChunk(col: Int, row: Int) -> Page {
+        let id = Self.chunkId(notebookId: notebook.id, col: col, row: row)
+        if let existing = pages.first(where: { $0.id == id }) { return existing }
+        let now = Self.now()
+        let chunk = Page(id: id, notebookId: notebook.id, index: 0, paper: boardPaper, background: nil, w: nil, h: nil,
+                         col: col, row: row, createdAt: now, updatedAt: now)
+        pages.append(chunk)
+        markPage(id)
+        manifestDirty = true
+        return chunk
+    }
+
+    /// Where an item is filed. One that already carries a real chunk id keeps it (undo and redo hand back items
+    /// with the id they were stored under); anything else goes to the chunk its bounding-box origin falls in.
+    private func boardChunk(for item: PageItem) -> String {
+        if let cell = chunkCell(of: item.pageId) { return ensureChunk(col: cell.col, row: cell.row).id }
+        let b = Geometry.itemBounds(item)
+        let cell = Self.chunkCell(x: b.x, y: b.y)
+        return ensureChunk(col: cell.col, row: cell.row).id
+    }
+
+    /// The board's paper, held by its origin chunk `<id>:0,0`.
+    var boardPaper: Paper {
+        let origin = Self.chunkId(notebookId: notebook.id, col: 0, row: 0)
+        return pages.first { $0.id == origin }?.paper ?? pages.first?.paper ?? .default
+    }
+
+    /// Every item's bounds plus the origin chunk, padded and snapped outward to the chunk grid.
+    var boardExtent: PageRect {
+        if let cached = extentCache { return cached }
+        let c = Self.boardChunkSize
+        var rects = [PageRect(x: 0, y: 0, w: c, h: c)]
+        for list in strokesByPage.values { for s in list { rects.append(Geometry.itemBounds(.stroke(s))) } }
+        for list in elementsByPage.values { for e in list { rects.append(Geometry.itemBounds(.element(e))) } }
+        let u = Geometry.unionRects(rects) ?? PageRect(x: 0, y: 0, w: c, h: c)
+        let pad = Self.boardPadding
+        let x0 = ((u.x - pad) / c).rounded(.down) * c
+        let y0 = ((u.y - pad) / c).rounded(.down) * c
+        let x1 = ((u.x + u.w + pad) / c).rounded(.up) * c
+        let y1 = ((u.y + u.h + pad) / c).rounded(.up) * c
+        let extent = PageRect(x: x0, y: y0, w: x1 - x0, h: y1 - y0)
+        extentCache = extent
+        return extent
+    }
+
+    /// The board as one page: board coordinates start at its origin, it is as big as the extent.
+    private func boardSurfacePage() -> Page {
+        let e = boardExtent
+        let originId = Self.chunkId(notebookId: notebook.id, col: 0, row: 0)
+        let origin = pages.first { $0.id == originId }
+        return Page(id: boardSurfaceId, notebookId: notebook.id, index: 0, paper: boardPaper, background: nil,
+                    w: e.w, h: e.h, col: nil, row: nil, createdAt: origin?.createdAt ?? 0, updatedAt: origin?.updatedAt ?? 0,
+                    originX: e.x, originY: e.y)
+    }
+
+    private func itemsChanged() { extentCache = nil }
 
     // MARK: Snapshots for saving
 

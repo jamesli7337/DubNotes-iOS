@@ -321,6 +321,10 @@ extension PageView {
         let paper = page.paper
         // tape covers the ink; a peeled strip is outline only
         for e in elements where PageView.isAboveInk(e) && !hiddenIds.contains(e.id) {
+            if isBoard { // the overlay covers only a window of the board
+                let b = Geometry.itemBounds(.element(e))
+                if !CGRect(x: b.x, y: b.y, width: b.w, height: b.h).intersects(boardWindow.insetBy(dx: -32, dy: -32)) { continue }
+            }
             ElementRenderer.draw(e, in: ctx, paper: paper, peeled: peeled.contains(e.id))
         }
 

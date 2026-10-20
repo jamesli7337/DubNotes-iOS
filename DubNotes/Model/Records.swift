@@ -182,9 +182,17 @@ struct Page: Codable, Equatable {
     var row: Int?
     var createdAt: Double
     var updatedAt: Double
+    /// Where the page's top-left sits in its own coordinate system. Always 0 for a stored page; only a board's
+    /// virtual surface page (see `NotebookDocument.boardSurfaceId`) has a non-zero origin. Never saved.
+    var originX: Double = 0
+    var originY: Double = 0
 
     var pageWidth: Double { w ?? PageUnits.width }
     var pageHeight: Double { h ?? PageUnits.height }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, notebookId, index, paper, background, w, h, col, row, createdAt, updatedAt
+    }
 }
 
 /// One raw input sample, serialised as `[x, y, pressure]`.
