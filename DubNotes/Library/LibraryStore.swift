@@ -48,6 +48,8 @@ final class LibraryStore {
     @ObservationIgnored private var dirtyManifests = Set<String>()
     @ObservationIgnored private var pending: DispatchWorkItem?
     let files: FileStore
+    /// The current plan, read when a notebook is created. Unset (tests, tools) means no cap.
+    @ObservationIgnored var planProvider: () -> Plan = { .pro }
 
     /// Autosave delay after the last change, as in the web store.
     static let saveDelay = 0.7
@@ -157,10 +159,17 @@ final class LibraryStore {
     /// The first page's record, for the card thumbnail.
     func firstPage(of id: String) -> Page? { manifests[id]?.pages.first }
 
+    /// The one gate for the Free-plan cap: both ways of making a notebook go through it. Backup import, loading and
+    /// deleting never do.
+    private func ensureCanCreateNotebook() throws {
+        guard NotebookCap.allowsCreation(plan: planProvider(), existing: notebooks.count) else { throw LibraryError.freePlanLimit }
+    }
+
     /// New notebooks go to the top of their folder's list. `paper` becomes the starting page's paper (a board
     /// keeps it on its origin chunk, as the web does).
     @discardableResult
-    func createNotebook(name: String, folderId: String?, paper: Paper, kind: Notebook.Kind) -> Notebook {
+    func createNotebook(name: String, folderId: String?, paper: Paper, kind: Notebook.Kind) throws -> Notebook {
+        try ensureCanCreateNotebook()
         let now = Self.now()
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallback = kind == .board ? "Untitled board" : "Untitled notebook"
@@ -184,6 +193,7 @@ final class LibraryStore {
     /// Adds a finished notebook (a PDF import) at the top of a folder and writes it to disk.
     @discardableResult
     func addNotebook(_ doc: NotebookDocument, assets: [Asset], folderId: String?) throws -> Notebook {
+        try ensureCanCreateNotebook()
         var nb = doc.notebook
         nb.folderId = folderId
         nb.order = topOrder(folderId)

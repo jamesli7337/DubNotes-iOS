@@ -65,6 +65,10 @@ struct NotebookContent: View {
     let session: NotebookSession
     let onBack: () -> Void
 
+    @Environment(\.aiSendGate) private var aiGate
+    @State private var trialExhausted = false
+    @State private var showingProfile = false
+
     @State private var sheet: Sheet?
     @State private var optionsOpen = false
     @State private var eraserMenu = false
@@ -143,6 +147,13 @@ struct NotebookContent: View {
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) {}
             Button("Rename") { session.rename(renameText) }
+        }
+        .alert("You've used your \(ProfileConstants.freeAIQuestions) free AI questions.", isPresented: $trialExhausted) {
+            Button("Upgrade") { showingProfile = true }
+            Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showingProfile) {
+            if let aiGate { ProfileView(model: ProfileViewModel(service: aiGate.account)) }
         }
         .alert(item: $notice) { n in Alert(title: Text(n.title), message: Text(n.message), dismissButton: .default(Text("OK"))) }
         .confirmationDialog("Eraser", isPresented: $eraserMenu, titleVisibility: .hidden) {
@@ -254,7 +265,7 @@ struct NotebookContent: View {
                 .accessibilityAddTraits(session.aiMode ? .isSelected : [])
                 Button {
                     setAIPanel(open: true)
-                    session.aiChats.sendStub()
+                    sendToAI()
                 } label: { islandIcon("paperplane").opacity(session.aiMode ? 1 : 0.35) }
                     .disabled(!session.aiMode)
                     .accessibilityLabel("Send to AI")
@@ -297,6 +308,16 @@ struct NotebookContent: View {
         let on = !session.aiMode
         session.setAIMode(on)
         setAIPanel(open: on)
+    }
+
+    private func sendToAI() {
+        guard let gate = aiGate else { session.aiChats.sendStub(); return }
+        Task {
+            switch await gate.decide() {
+            case .allowed: session.aiChats.sendStub { gate.recordSuccessfulReply() }
+            case .trialExhausted: trialExhausted = true
+            }
+        }
     }
 
     private func setAIPanel(open: Bool) {

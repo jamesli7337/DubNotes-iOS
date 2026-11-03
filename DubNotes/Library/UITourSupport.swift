@@ -33,9 +33,9 @@ enum AppLaunch {
         if let data = tourBackup() { _ = try? store.importBackup(data) }
         // a second paged notebook, so "Split screen page" has something to offer; made to look older than the
         // restored one so the Continue work card still shows the restored notebook
-        let extra = store.createNotebook(name: "Chemistry", folderId: nil,
-                                         paper: Paper(template: .grid, spacing: .medium, color: .white), kind: .pages)
-        if let i = store.notebooks.firstIndex(where: { $0.id == extra.id }) { store.notebooks[i].updatedAt = 4500 }
+        if let extra = try? store.createNotebook(name: "Chemistry", folderId: nil,
+                                                 paper: Paper(template: .grid, spacing: .medium, color: .white), kind: .pages),
+           let i = store.notebooks.firstIndex(where: { $0.id == extra.id }) { store.notebooks[i].updatedAt = 4500 }
         cachedTour = store
         return store
     }

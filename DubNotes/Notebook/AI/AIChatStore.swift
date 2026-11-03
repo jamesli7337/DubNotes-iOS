@@ -57,7 +57,8 @@ final class AIChatStore {
     }
 
     /// Fake send: creates a chat if none is active, then after about a second adds a placeholder reply.
-    func sendStub() {
+    /// `onSaved` runs once the reply has been added to its chat: not for errors, or a chat deleted while waiting.
+    func sendStub(onSaved: (() -> Void)? = nil) {
         guard thinkingChatId == nil else { return }
         let id: String
         if let active = activeChat {
@@ -74,15 +75,16 @@ final class AIChatStore {
         thinkingChatId = id
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: Self.thinkingNanoseconds)
-            self?.finishStub(chatId: id)
+            self?.finishStub(chatId: id, onSaved: onSaved)
         }
     }
 
-    private func finishStub(chatId: String) {
+    private func finishStub(chatId: String, onSaved: (() -> Void)?) {
         thinkingChatId = nil
         if let i = chats.firstIndex(where: { $0.id == chatId }) { // else deleted while waiting
             chats[i].turns.append(AITurn(text: Self.placeholderReply, model: Self.stubModel, isError: false))
             chats[i].updatedAt = Date()
+            onSaved?()
         }
         onReply?()
     }
