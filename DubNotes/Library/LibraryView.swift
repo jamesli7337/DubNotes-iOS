@@ -46,6 +46,8 @@ struct LibraryView: View {
     @State private var prefs = LibraryPreferences.load()
     @State private var showingNew = false
     @State private var showingSettings = false
+    @State private var showingProfile = false
+    @State private var account: MockAccountService
     @State private var moving: MoveRequest?
     @State private var coverFor: MoveRequest?
     @State private var opening: OpenNotebook?
@@ -60,6 +62,7 @@ struct LibraryView: View {
 
     init(store: LibraryStore) {
         self.store = store
+        _account = State(initialValue: MockAccountService(notebookCount: { store.notebooks.count }))
     }
 
     private var currentID: String? {
@@ -82,6 +85,7 @@ struct LibraryView: View {
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsSheet() }
+        .sheet(isPresented: $showingProfile) { ProfileView(model: ProfileViewModel(service: account)) }
         .sheet(item: $moving) { req in
             if let nb = store.notebook(req.id) { MoveToSheet(store: store, notebook: nb) }
         }
@@ -356,6 +360,8 @@ struct LibraryView: View {
                 Button { startExport() } label: { Label("Export", systemImage: "arrow.up.right.square") }.labelStyle(.titleAndIcon)
                 Button { startImport(.backup) } label: { Label("Restore", systemImage: "tray.and.arrow.down") }.labelStyle(.titleAndIcon)
                 Button { showingSettings = true } label: { Label("Settings", systemImage: "gearshape") }
+                    .labelStyle(.iconOnly)
+                Button { showingProfile = true } label: { Label("Profile", systemImage: "person.crop.circle") }
                     .labelStyle(.iconOnly)
             }
         }

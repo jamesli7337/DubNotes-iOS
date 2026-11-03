@@ -119,6 +119,8 @@ final class ScreenshotTourUITests: XCTestCase {
         _ = tap(button("Cancel"))
         step("settings-sheet") { tap(button("Settings")) }
         _ = tap(button("Done"))
+        step("profile-sheet") { tap(button("Profile")) }
+        _ = tap(button("Close"))
         _ = tap(app.staticTexts["All items"].firstMatch)
 
         // The first paged notebook
