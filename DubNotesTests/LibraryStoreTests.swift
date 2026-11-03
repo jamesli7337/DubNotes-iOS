@@ -12,7 +12,7 @@ final class LibraryStoreTests: ScratchTestCase {
 
     // MARK: Persistence
 
-    func testAnEmptyLibraryStartsEmpty() throws {
+    func testAnEmptyLibraryStartsEmpty() {
         let s = makeStore()
         XCTAssertTrue(s.notebooks.isEmpty)
         XCTAssertTrue(s.folders.isEmpty)
@@ -20,11 +20,11 @@ final class LibraryStoreTests: ScratchTestCase {
         XCTAssertNil(s.recent.first)
     }
 
-    func testNotebooksFoldersAndDividersSurviveARelaunch() throws {
+    func testNotebooksFoldersAndDividersSurviveARelaunch() {
         let s = makeStore()
         let folder = s.createFolder(name: "School", parentId: nil)
         let sub = s.createFolder(name: "Science", parentId: folder.id)
-        let nb = try s.createNotebook(name: "Physics", folderId: sub.id, paper: Paper(template: .grid, spacing: .narrow, color: .cream), kind: .pages)
+        let nb = s.createNotebook(name: "Physics", folderId: sub.id, paper: Paper(template: .grid, spacing: .narrow, color: .cream), kind: .pages)
         s.createDivider(folderId: nil, label: "Archive")
         s.setCover(nb.id, Notebook.Cover(color: "#0e7490", pattern: "waves"))
 
@@ -39,9 +39,9 @@ final class LibraryStoreTests: ScratchTestCase {
         XCTAssertEqual(again.firstPage(of: nb.id)?.paper, Paper(template: .grid, spacing: .narrow, color: .cream))
     }
 
-    func testAutosaveWritesAfterTheDelay() throws {
+    func testAutosaveWritesAfterTheDelay() {
         let s = makeStore()
-        let nb = try s.createNotebook(name: "Timed", folderId: nil, paper: .default, kind: .pages)
+        let nb = s.createNotebook(name: "Timed", folderId: nil, paper: .default, kind: .pages)
         let file = scratch.appendingPathComponent("Notebooks/\(nb.id)/notebook.json")
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "nothing is written until the autosave fires")
         let wrote = expectation(description: "autosaved")
@@ -53,7 +53,7 @@ final class LibraryStoreTests: ScratchTestCase {
 
     func testEditsToAnOpenNotebookAreSavedAndCountedOnClose() throws {
         let s = makeStore()
-        let nb = try s.createNotebook(name: "Work", folderId: nil, paper: .default, kind: .pages)
+        let nb = s.createNotebook(name: "Work", folderId: nil, paper: .default, kind: .pages)
         s.flushNow()
         let doc = try XCTUnwrap(s.openDocument(nb.id))
         let pageId = try item(doc.pages, 0).id
@@ -74,16 +74,16 @@ final class LibraryStoreTests: ScratchTestCase {
 
     func testSizeLabels() throws {
         let s = makeStore()
-        let nb = try s.createNotebook(name: "N", folderId: nil, paper: .default, kind: .pages)
+        let nb = s.createNotebook(name: "N", folderId: nil, paper: .default, kind: .pages)
         XCTAssertEqual(s.sizeLabel(for: nb), "1 page")
-        let board = try s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .board)
+        let board = s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .board)
         XCTAssertEqual(s.sizeLabel(for: board), "Empty")
         XCTAssertEqual(s.firstPage(of: board.id)?.id, "\(board.id):0,0")
     }
 
-    func testDeletingANotebookRemovesItsFolder() throws {
+    func testDeletingANotebookRemovesItsFolder() {
         let s = makeStore()
-        let nb = try s.createNotebook(name: "Gone", folderId: nil, paper: .default, kind: .pages)
+        let nb = s.createNotebook(name: "Gone", folderId: nil, paper: .default, kind: .pages)
         s.flushNow()
         let dir = scratch.appendingPathComponent("Notebooks/\(nb.id)")
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
@@ -94,28 +94,28 @@ final class LibraryStoreTests: ScratchTestCase {
 
     // MARK: Order, folders (rules carried over from the in-memory store)
 
-    func testNewNotebooksGoToTheTopOfTheirFolder() throws {
+    func testNewNotebooksGoToTheTopOfTheirFolder() {
         let s = makeStore()
-        let a = try s.createNotebook(name: "A", folderId: nil, paper: .default, kind: .pages)
-        let b = try s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .pages)
+        let a = s.createNotebook(name: "A", folderId: nil, paper: .default, kind: .pages)
+        let b = s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .pages)
         XCTAssertEqual(s.folderItems(nil).map(\.id), [b.id, a.id])
     }
 
-    func testMovingUpAndDownSwapsNeighboursAndPersists() throws {
+    func testMovingUpAndDownSwapsNeighboursAndPersists() {
         let s = makeStore()
-        let a = try s.createNotebook(name: "A", folderId: nil, paper: .default, kind: .pages)
-        let b = try s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .pages)
-        let c = try s.createNotebook(name: "C", folderId: nil, paper: .default, kind: .pages)
+        let a = s.createNotebook(name: "A", folderId: nil, paper: .default, kind: .pages)
+        let b = s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .pages)
+        let c = s.createNotebook(name: "C", folderId: nil, paper: .default, kind: .pages)
         s.moveItem(c.id, by: 1)
         XCTAssertEqual(s.folderItems(nil).map(\.id), [b.id, c.id, a.id])
         XCTAssertEqual(relaunch(s).folderItems(nil).map(\.id), [b.id, c.id, a.id])
     }
 
-    func testDeletingAFolderMovesItsContentsUp() throws {
+    func testDeletingAFolderMovesItsContentsUp() {
         let s = makeStore()
         let outer = s.createFolder(name: "Outer", parentId: nil)
         let inner = s.createFolder(name: "Inner", parentId: outer.id)
-        let nb = try s.createNotebook(name: "N", folderId: inner.id, paper: .default, kind: .pages)
+        let nb = s.createNotebook(name: "N", folderId: inner.id, paper: .default, kind: .pages)
         s.deleteFolder(inner.id)
         XCTAssertEqual(s.notebook(nb.id)?.folderId, outer.id)
         let again = relaunch(s)
@@ -125,8 +125,8 @@ final class LibraryStoreTests: ScratchTestCase {
 
     func testDividerAboveANotebook() throws {
         let s = makeStore()
-        let a = try s.createNotebook(name: "A", folderId: nil, paper: .default, kind: .pages)
-        let b = try s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .pages)
+        let a = s.createNotebook(name: "A", folderId: nil, paper: .default, kind: .pages)
+        let b = s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .pages)
         s.createDivider(folderId: nil, label: "Section", aboveNotebookId: a.id)
         let items = s.folderItems(nil)
         XCTAssertEqual(items.count, 3)
@@ -135,10 +135,10 @@ final class LibraryStoreTests: ScratchTestCase {
         XCTAssertEqual(try item(items, 2).id, a.id)
     }
 
-    func testRecentIsByLastEdit() throws {
+    func testRecentIsByLastEdit() {
         let s = makeStore()
-        let a = try s.createNotebook(name: "A", folderId: nil, paper: .default, kind: .pages)
-        let b = try s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .pages)
+        let a = s.createNotebook(name: "A", folderId: nil, paper: .default, kind: .pages)
+        let b = s.createNotebook(name: "B", folderId: nil, paper: .default, kind: .pages)
         Thread.sleep(forTimeInterval: 0.02) // timestamps are in milliseconds
         s.setCover(a.id, Notebook.Cover(color: "#000000")) // touches A's updatedAt
         XCTAssertEqual(s.recent.first?.id, a.id)
@@ -149,7 +149,7 @@ final class LibraryStoreTests: ScratchTestCase {
 
     func testRestoreAddsCopiesAndNeverReplaces() throws {
         let s = makeStore()
-        let mine = try s.createNotebook(name: "Mine", folderId: nil, paper: .default, kind: .pages)
+        let mine = s.createNotebook(name: "Mine", folderId: nil, paper: .default, kind: .pages)
         let summary = try s.importBackup(fixtureData())
         XCTAssertEqual(summary.notebooks, 2)
         XCTAssertEqual(summary.folders, 2)
@@ -193,7 +193,7 @@ final class LibraryStoreTests: ScratchTestCase {
 
     func testRestoredRootItemsGoAfterWhatIsAlreadyThere() throws {
         let s = makeStore()
-        let mine = try s.createNotebook(name: "Mine", folderId: nil, paper: .default, kind: .pages)
+        let mine = s.createNotebook(name: "Mine", folderId: nil, paper: .default, kind: .pages)
         try s.importBackup(fixtureData())
         let root = s.folderItems(nil)
         XCTAssertEqual(root.first?.id, mine.id)
@@ -203,7 +203,7 @@ final class LibraryStoreTests: ScratchTestCase {
 
     func testARestoreThatFailsLeavesTheLibraryAlone() throws {
         let s = makeStore()
-        let mine = try s.createNotebook(name: "Mine", folderId: nil, paper: .default, kind: .pages)
+        let mine = s.createNotebook(name: "Mine", folderId: nil, paper: .default, kind: .pages)
         XCTAssertThrowsError(try s.importBackup(Data("not a backup".utf8)))
         XCTAssertThrowsError(try s.importBackup(Data(#"{"app":"other","version":1}"#.utf8)))
         XCTAssertEqual(s.notebooks.map(\.id), [mine.id])

@@ -58,8 +58,6 @@ protocol AccountService: AnyObject {
     func restorePurchases() async throws -> Bool
     func redeemReferral(code: String) async throws
     func redeemPromo(code: String) async throws
-    /// Uses up one free trial question. Call only after a reply was saved.
-    func consumeAITrialQuestion()
 }
 
 /// In-memory stand-in: nothing is stored, nothing leaves the device. `notebookCount` is read live from the library.
@@ -67,20 +65,19 @@ protocol AccountService: AnyObject {
 final class MockAccountService: AccountService {
     private(set) var user: AccountUser?
     private(set) var plan: Plan
+    private(set) var aiTrialRemaining: Int
     private(set) var referralCode: String
     private(set) var referralCount: Int
     private var redeemedFriendCode = false
     private let notebookCountProvider: () -> Int
-    private let aiTrial: AITrialCounter
 
     var notebookCount: Int { notebookCountProvider() }
-    var aiTrialRemaining: Int { aiTrial.remaining }
 
-    init(user: AccountUser? = nil, plan: Plan = .free,
-         aiTrial: AITrialCounter = AITrialCounter(storage: InMemoryAITrialStorage()), referralCode: String = "", referralCount: Int = 0, notebookCount: @escaping () -> Int) {
+    init(user: AccountUser? = nil, plan: Plan = .free, aiTrialRemaining: Int = ProfileConstants.freeAIQuestions,
+         referralCode: String = "", referralCount: Int = 0, notebookCount: @escaping () -> Int) {
         self.user = user
         self.plan = plan
-        self.aiTrial = aiTrial
+        self.aiTrialRemaining = aiTrialRemaining
         self.referralCode = referralCode
         self.referralCount = referralCount
         self.notebookCountProvider = notebookCount
@@ -100,6 +97,7 @@ final class MockAccountService: AccountService {
 
     func deleteAccount() async throws {
         await signOut()
+        aiTrialRemaining = ProfileConstants.freeAIQuestions
         redeemedFriendCode = false
     }
 
@@ -123,6 +121,4 @@ final class MockAccountService: AccountService {
     func redeemPromo(code: String) async throws {
         throw AccountError.unavailable
     }
-
-    func consumeAITrialQuestion() { aiTrial.consume() }
 }

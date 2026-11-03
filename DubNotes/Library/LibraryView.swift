@@ -48,8 +48,6 @@ struct LibraryView: View {
     @State private var showingSettings = false
     @State private var showingProfile = false
     @State private var account: MockAccountService
-    @State private var gate: AISendGate
-    @State private var showingLimit = false
     @State private var moving: MoveRequest?
     @State private var coverFor: MoveRequest?
     @State private var opening: OpenNotebook?
@@ -64,10 +62,7 @@ struct LibraryView: View {
 
     init(store: LibraryStore) {
         self.store = store
-        let account = MockAccountService(aiTrial: .shared, notebookCount: { store.notebooks.count })
-        _account = State(initialValue: account)
-        _gate = State(initialValue: AISendGate(account: account))
-        store.planProvider = { MainActor.assumeIsolated { account.plan } }
+        _account = State(initialValue: MockAccountService(notebookCount: { store.notebooks.count }))
     }
 
     private var currentID: String? {
@@ -85,12 +80,8 @@ struct LibraryView: View {
         }
         .sheet(isPresented: $showingNew) {
             NewNotebookSheet { name, paper, kind in
-                do {
-                    let nb = try store.createNotebook(name: name, folderId: currentID, paper: paper, kind: kind)
-                    opening = OpenNotebook(id: nb.id)
-                } catch {
-                    reportCreateFailure(error)
-                }
+                let nb = store.createNotebook(name: name, folderId: currentID, paper: paper, kind: kind)
+                opening = OpenNotebook(id: nb.id)
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsSheet() }
@@ -103,7 +94,6 @@ struct LibraryView: View {
         }
         .fullScreenCover(item: $opening) { open in
             NotebookScreen(store: store, notebookId: open.id) { opening = nil }
-                .environment(\.aiSendGate, gate)
         }
         .fileImporter(isPresented: $importerOpen,
                       allowedContentTypes: importerKind == .pdf ? [.pdf] : [.json]) { result in
@@ -114,10 +104,6 @@ struct LibraryView: View {
             if case .failure(let error) = result {
                 notice = Notice(title: "Export failed", message: error.localizedDescription)
             }
-        }
-        .alert(LibraryError.freePlanLimit.errorDescription ?? "", isPresented: $showingLimit) {
-            Button("Upgrade") { showingProfile = true }
-            Button("Cancel", role: .cancel) {}
         }
         .alert(item: $notice) { n in
             Alert(title: Text(n.title), message: Text(n.message), dismissButton: .default(Text("OK")))
@@ -168,24 +154,9 @@ struct LibraryView: View {
                 if !s.warnings.isEmpty { message += "\n\n" + s.warnings.prefix(5).joined(separator: "\n") }
                 notice = Notice(title: "Backup restored", message: message)
             }
-        } catch LibraryError.freePlanLimit {
-            reportCreateFailure(LibraryError.freePlanLimit)
         } catch {
             let title = kind == .pdf ? "Import failed" : "Restore failed"
             notice = Notice(title: title, message: error.localizedDescription)
-        }
-    }
-
-    /// The free-plan limit gets its own alert; anything else is reported as before. The short delay lets a closing
-    /// sheet finish first, or the alert would be dropped.
-    private func reportCreateFailure(_ error: Error) {
-        if case LibraryError.freePlanLimit = error {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(450))
-                showingLimit = true
-            }
-        } else {
-            notice = Notice(title: "Couldn’t create", message: error.localizedDescription)
         }
     }
 
